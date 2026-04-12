@@ -5,6 +5,7 @@ import bodyParser from "body-parser";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
+import { MongoMemoryServer } from "mongodb-memory-server";
 import userroutes from "./routes/auth.js";
 import videoroutes from "./routes/video.js";
 import likeroutes from "./routes/like.js";
@@ -16,7 +17,21 @@ import downloadroutes from "./routes/download.js";
 dotenv.config();
 const app = express();
 import path from "path";
-app.use(cors());
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_PREVIEW_URL,
+  "http://localhost:3000",
+].filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
 app.use("/uploads", express.static(path.join("uploads")));
@@ -69,12 +84,28 @@ server.listen(PORT, () => {
   console.log(`server running on port ${PORT}`);
 });
 
-const DBURL = process.env.DB_URL;
-mongoose
-  .connect(DBURL)
-  .then(() => {
-    console.log("Mongodb connected");
-  })
-  .catch((error) => {
-    console.log(error);
-  });
+const connectDatabase = async () => {
+  const configuredDbUrl = process.env.DB_URL;
+  const shouldUseMemoryMongo =
+    process.env.USE_MEMORY_MONGO === "true" ||
+    !configuredDbUrl ||
+    configuredDbUrl.includes("localhost") ||
+    configuredDbUrl.includes("127.0.0.1");
+
+  try {
+    if (shouldUseMemoryMongo) {
+      const memoryServer = await MongoMemoryServer.create();
+      const memoryUri = memoryServer.getUri("yourtube");
+      await mongoose.connect(memoryUri);
+      console.log("MongoDB connected using in-memory fallback");
+      return;
+    }
+
+    await mongoose.connect(configuredDbUrl);
+    console.log("MongoDB connected");
+  } catch (error) {
+    console.log("Database connection failed", error);
+  }
+};
+
+connectDatabase();

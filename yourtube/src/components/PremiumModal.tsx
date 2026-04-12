@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { useUser } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
@@ -13,7 +14,15 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   const { user } = useUser();
   const [selectedPlan, setSelectedPlan] = useState<"Bronze" | "Silver" | "Gold">(defaultPlan || "Silver");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const currentPlan = user?.plan || "Free";
+
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      setMounted(false);
+    };
+  }, []);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -25,7 +34,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
     };
   }, []);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleUpgrade = async () => {
     if (!user?._id) {
@@ -129,9 +138,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
      { name: "Gold", price: 100, limit: "Unlimited watch time", color: "bg-yellow-500" }
   ];
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+      <div className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 md:p-8 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-black transition text-xl font-bold"
@@ -177,7 +186,8 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

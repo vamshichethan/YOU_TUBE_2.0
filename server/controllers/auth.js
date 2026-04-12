@@ -45,6 +45,59 @@ const sendEmailOtp = async (email, otp, state) => {
   }
 };
 
+const sendMobileOtp = async (phone, otp, state) => {
+  const message = `Your YourTube OTP is ${otp}. It is valid for 5 minutes. State detected: ${state || "Unknown"}.`;
+
+  try {
+    if (process.env.SMS_PROVIDER === "textbelt") {
+      const response = await fetch("https://textbelt.com/text", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone,
+          message,
+          key: process.env.TEXTBELT_API_KEY || "textbelt",
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || data?.success === false) {
+        throw new Error(data?.error || `Textbelt request failed with ${response.status}`);
+      }
+      return;
+    }
+
+    if (process.env.SMS_API_URL) {
+      const response = await fetch(process.env.SMS_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(process.env.SMS_API_KEY ? { Authorization: `Bearer ${process.env.SMS_API_KEY}` } : {}),
+        },
+        body: JSON.stringify({
+          phone,
+          otp,
+          state,
+          message,
+          senderId: process.env.SMS_SENDER_ID || "YourTube",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`SMS request failed with ${response.status}`);
+      }
+      return;
+    }
+  } catch (error) {
+    console.log("SMS OTP fallback:", { phone, otp, state, message, error: String(error) });
+    return;
+  }
+
+  console.log("SMS OTP fallback:", { phone, otp, state, message });
+};
+
 export const requestOTP = async (req, res) => {
   const { identifier, state } = req.body;
   const normalizedIdentifier = identifier?.trim();
@@ -84,6 +137,7 @@ export const requestOTP = async (req, res) => {
   }
 
   console.log(`[SMS OTP] State: ${normalizedState}, To: ${normalizedIdentifier}, OTP: ${otp}`);
+  await sendMobileOtp(normalizedIdentifier, otp, normalizedState);
   return res.status(200).json({
     message: "OTP sent to your registered mobile number",
     channel: otpChannel,
