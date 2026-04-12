@@ -5,7 +5,6 @@ import bodyParser from "body-parser";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
 import { fileURLToPath } from "url";
 import userroutes from "./routes/auth.js";
 import videoroutes from "./routes/video.js";
@@ -104,18 +103,28 @@ server.listen(PORT, () => {
 
 const connectDatabase = async () => {
   const configuredDbUrl = process.env.DB_URL;
-  const shouldUseMemoryMongo =
-    process.env.USE_MEMORY_MONGO === "true" ||
+  const isLocalDatabaseTarget =
     !configuredDbUrl ||
     configuredDbUrl.includes("localhost") ||
     configuredDbUrl.includes("127.0.0.1");
+  const shouldUseMemoryMongo =
+    process.env.USE_MEMORY_MONGO === "true" &&
+    process.env.NODE_ENV !== "production";
 
   try {
     if (shouldUseMemoryMongo) {
+      const { MongoMemoryServer } = await import("mongodb-memory-server");
       const memoryServer = await MongoMemoryServer.create();
       const memoryUri = memoryServer.getUri("yourtube");
       await mongoose.connect(memoryUri);
       console.log("MongoDB connected using in-memory fallback");
+      return;
+    }
+
+    if (isLocalDatabaseTarget) {
+      console.warn(
+        "Skipping database connection because no production-ready DB_URL is configured. API fallback data will be used."
+      );
       return;
     }
 

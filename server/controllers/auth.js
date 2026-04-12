@@ -8,6 +8,7 @@ const otpCache = new Map();
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^\+?\d{10,15}$/;
 const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+const DELIVERY_TIMEOUT_MS = 10000;
 
 const transporter = process.env.SMTP_HOST
   ? nodemailer.createTransport({
@@ -91,6 +92,7 @@ const sendEmailOtp = async (email, otp, state) => {
           "Content-Type": "application/json",
           "api-key": process.env.BREVO_API_KEY,
         },
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
         body: JSON.stringify({
           sender: {
             email: mailOptions.from,
@@ -143,6 +145,7 @@ const sendMobileOtp = async (phone, otp, state) => {
           ).toString("base64")}`,
           "Content-Type": "application/x-www-form-urlencoded",
         },
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
         body: payload,
       });
 
@@ -160,6 +163,7 @@ const sendMobileOtp = async (phone, otp, state) => {
         headers: {
           "Content-Type": "application/json",
         },
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
         body: JSON.stringify({
           phone,
           message,
@@ -181,6 +185,7 @@ const sendMobileOtp = async (phone, otp, state) => {
           "Content-Type": "application/json",
           ...(process.env.SMS_API_KEY ? { Authorization: `Bearer ${process.env.SMS_API_KEY}` } : {}),
         },
+        signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
         body: JSON.stringify({
           phone,
           otp,

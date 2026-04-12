@@ -1,6 +1,9 @@
 import axios from "axios";
+export const backendBaseUrl = (process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000").replace(/\/$/, "");
+
 const axiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000",
+  baseURL: backendBaseUrl,
+  timeout: 12000,
 });
 
 axiosInstance.interceptors.request.use((config) => {

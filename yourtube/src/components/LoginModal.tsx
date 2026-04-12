@@ -77,7 +77,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
       setDevOtpPreview(response.data?.devOtp || '');
       setStep('otp');
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Failed to send OTP');
+      setError(
+        err.code === 'ECONNABORTED'
+          ? 'The server took too long to respond. Please try again in a few seconds.'
+          : err.response?.data?.message || 'Failed to send OTP'
+      );
     } finally {
       setLoading(false);
     }
