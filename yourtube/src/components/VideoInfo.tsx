@@ -23,6 +23,9 @@ const VideoInfo = ({ video }: any) => {
   const { user } = useUser();
   const [isWatchLater, setIsWatchLater] = useState(false);
   const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
+  const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [subscriberCount, setSubscriberCount] = useState(1200000);
 
   // const user: any = {
   //   id: "1",
@@ -58,19 +61,13 @@ const VideoInfo = ({ video }: any) => {
     try {
       const res = await axiosInstance.post(`/like/${video._id}`, {
         userId: user?._id,
+        action: "like",
       });
-      if (res.data.liked) {
-        if (isLiked) {
-          setlikes((prev: any) => prev - 1);
-          setIsLiked(false);
-        } else {
-          setlikes((prev: any) => prev + 1);
-          setIsLiked(true);
-          if (isDisliked) {
-            setDislikes((prev: any) => prev - 1);
-            setIsDisliked(false);
-          }
-        }
+      setIsLiked(Boolean(res.data.liked));
+      setIsDisliked(Boolean(res.data.disliked));
+      setlikes((prev: any) => prev + (res.data.liked ? (isLiked ? 0 : 1) : (isLiked ? -1 : 0)));
+      if (isDisliked) {
+        setDislikes((prev: any) => prev - (res.data.liked ? 1 : 0));
       }
     } catch (error) {
       console.log(error);
@@ -95,23 +92,27 @@ const VideoInfo = ({ video }: any) => {
     try {
       const res = await axiosInstance.post(`/like/${video._id}`, {
         userId: user?._id,
+        action: "dislike",
       });
-      if (!res.data.liked) {
-        if (isDisliked) {
-          setDislikes((prev: any) => prev - 1);
-          setIsDisliked(false);
-        } else {
-          setDislikes((prev: any) => prev + 1);
-          setIsDisliked(true);
-          if (isLiked) {
-            setlikes((prev: any) => prev - 1);
-            setIsLiked(false);
-          }
-        }
+      setIsDisliked(Boolean(res.data.disliked));
+      setIsLiked(Boolean(res.data.liked));
+      setDislikes((prev: any) => prev + (res.data.disliked ? (isDisliked ? 0 : 1) : (isDisliked ? -1 : 0)));
+      if (isLiked) {
+        setlikes((prev: any) => prev - (res.data.disliked ? 1 : 0));
       }
     } catch (error) {
       console.log(error);
     }
+  };
+
+  const handleSubscribe = () => {
+    if (!user) {
+      alert("Please sign in to subscribe");
+      return;
+    }
+
+    setIsSubscribed((prev) => !prev);
+    setSubscriberCount((prev) => prev + (isSubscribed ? -1 : 1));
   };
 
   const handleDownload = async () => {
@@ -120,6 +121,7 @@ const VideoInfo = ({ video }: any) => {
       return;
     }
     try {
+      setDownloadStatus("Preparing download...");
       await axiosInstance.post('/download/request', { videoId: video._id });
 
       const videoUrl = typeof video.filepath === 'string' && video.filepath.startsWith('http') 
@@ -137,11 +139,17 @@ const VideoInfo = ({ video }: any) => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
+      setDownloadStatus(user.plan === "Free" ? "Free plan: 1 download used for today" : "Premium plan: unlimited downloads active");
       alert("Video downloaded! It's also accessible in your Downloads section.");
     } catch (error: any) {
       if (error.response && error.response.status === 403 && error.response.data && error.response.data.message === "DOWNLOAD_LIMIT_REACHED") {
+        setDownloadStatus("Free plan limit reached. Upgrade for unlimited downloads.");
         setIsPremiumModalOpen(true);
+      } else if (error.response?.status === 401) {
+        setDownloadStatus("Please sign in to download videos.");
+        alert("Please sign in to download videos");
       } else {
+        setDownloadStatus(null);
         alert("Failed to download video. Please try again.");
       }
     }
@@ -157,9 +165,11 @@ const VideoInfo = ({ video }: any) => {
           </Avatar>
           <div>
             <h3 className="font-semibold">{video.videochanel}</h3>
-            <p className="text-sm text-muted-foreground transition-colors duration-500">1.2M subscribers</p>
+            <p className="text-sm text-muted-foreground transition-colors duration-500">{subscriberCount.toLocaleString()} subscribers</p>
           </div>
-          <Button className="ml-4">Subscribe</Button>
+          <Button className="ml-4" onClick={handleSubscribe} variant={isSubscribed ? "secondary" : "default"}>
+            {isSubscribed ? "Subscribed" : "Subscribe"}
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center bg-muted rounded-full transition-colors duration-500">
@@ -228,6 +238,9 @@ const VideoInfo = ({ video }: any) => {
           </Button>
         </div>
       </div>
+      {downloadStatus && (
+        <p className="text-sm font-medium text-muted-foreground">{downloadStatus}</p>
+      )}
       <div className="bg-muted rounded-xl p-4 transition-colors duration-500">
         <div className="flex gap-4 text-sm font-semibold mb-2">
           <span>{video.views.toLocaleString()} views</span>

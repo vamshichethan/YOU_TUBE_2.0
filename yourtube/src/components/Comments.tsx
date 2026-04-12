@@ -19,16 +19,28 @@ interface Comment {
   dislikes: string[];
 }
 
+const translationLanguages = [
+  { label: "English", value: "en" },
+  { label: "Hindi", value: "hi" },
+  { label: "Telugu", value: "te" },
+  { label: "Tamil", value: "ta" },
+  { label: "Kannada", value: "kn" },
+  { label: "Spanish", value: "es" },
+  { label: "French", value: "fr" },
+];
+
+const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}.,!?'"()-]+$/u;
+
 const Comments = ({ videoId }: any) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
-  const [userCity, setUserCity] = useState("Unknown");
+  const [userCity, setUserCity] = useState("Unknown city");
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
+  const [translatingCommentId, setTranslatingCommentId] = useState<string | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState("en");
 
   useEffect(() => {
     loadComments();
@@ -39,9 +51,9 @@ const Comments = ({ videoId }: any) => {
     try {
       const res = await fetch('https://ipapi.co/json/');
       const data = await res.json();
-      setUserCity(data.city || 'Bangalore');
+      setUserCity(data.city || 'Unknown city');
     } catch (error) {
-       setUserCity('Bangalore');
+       setUserCity('Unknown city');
     }
   };
 
@@ -59,10 +71,8 @@ const Comments = ({ videoId }: any) => {
   const handleSubmitComment = async () => {
     if (!user || !newComment.trim()) return;
 
-    // Front-end Special Character Check
-    const specialChars = /[@#$%^&*]/;
-    if (specialChars.test(newComment)) {
-      alert("Comments containing special characters (@#$%^&*) are not allowed.");
+    if (!allowedCommentPattern.test(newComment.trim())) {
+      alert("Comments can use any language, but only letters, numbers, spaces, and basic punctuation are allowed.");
       return;
     }
 
@@ -109,16 +119,24 @@ const Comments = ({ videoId }: any) => {
 
   const handleTranslate = async (comment: Comment) => {
     if (translatedComments[comment._id]) {
-      // Toggle back if already translated
       const newTranslations = { ...translatedComments };
       delete newTranslations[comment._id];
       setTranslatedComments(newTranslations);
       return;
     }
 
-    // Mock Translation Logic
-    const translated = `[Translated to English]: ${comment.commentbody}`;
-    setTranslatedComments(prev => ({ ...prev, [comment._id]: translated }));
+    setTranslatingCommentId(comment._id);
+    try {
+      const res = await axiosInstance.post("/comment/translate", {
+        text: comment.commentbody,
+        targetLanguage,
+      });
+      setTranslatedComments((prev) => ({ ...prev, [comment._id]: res.data.translatedText }));
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Unable to translate this comment right now.");
+    } finally {
+      setTranslatingCommentId(null);
+    }
   };
 
   if (loading) {
@@ -131,6 +149,24 @@ const Comments = ({ videoId }: any) => {
         {comments.length} Comments
       </h2>
 
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/50 bg-background/70 px-4 py-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <Languages className="h-4 w-4 text-red-500" />
+          Translate comments to
+        </div>
+        <select
+          value={targetLanguage}
+          onChange={(e) => setTargetLanguage(e.target.value)}
+          className="rounded-full border border-border bg-background px-3 py-2 text-sm text-foreground outline-none"
+        >
+          {translationLanguages.map((language) => (
+            <option key={language.value} value={language.value}>
+              {language.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {user && (
         <div className="flex gap-4">
           <Avatar className="w-10 h-10 border border-border/50">
@@ -139,7 +175,7 @@ const Comments = ({ videoId }: any) => {
           </Avatar>
           <div className="flex-1 space-y-3">
             <Textarea
-              placeholder="Add a friendly comment... (No @#$%^&*)"
+              placeholder="Add a friendly comment in any language..."
               value={newComment}
               onChange={(e: any) => setNewComment(e.target.value)}
               className="min-h-[100px] resize-none border-0 border-b-2 border-border/50 bg-transparent rounded-none focus-visible:ring-0 focus:border-red-500 transition-all font-sans text-lg placeholder:opacity-50"
@@ -176,7 +212,7 @@ const Comments = ({ videoId }: any) => {
                 <span className="font-bold text-sm text-foreground">{comment.usercommented}</span>
                 <span className="text-[10px] font-bold py-0.5 px-2 bg-muted rounded-full text-muted-foreground flex items-center gap-1">
                   <MapPin className="w-2.5 h-2.5 text-red-500" />
-                  {comment.city || 'Bangalore'}
+                  {comment.city || "Unknown city"}
                 </span>
                 <span className="text-[10px] text-muted-foreground/40">•</span>
                 <span className="text-[11px] text-muted-foreground font-medium">
@@ -213,10 +249,15 @@ const Comments = ({ videoId }: any) => {
 
                 <button 
                   onClick={() => handleTranslate(comment)}
+                  disabled={translatingCommentId === comment._id}
                   className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-600 transition-colors ml-2 py-1.5 px-3 hover:bg-red-500/5 rounded-full"
                 >
                   <Languages className="w-3.5 h-3.5" />
-                  {translatedComments[comment._id] ? "Show Original" : "Translate"}
+                  {translatingCommentId === comment._id
+                    ? "Translating..."
+                    : translatedComments[comment._id]
+                      ? "Show Original"
+                      : "Translate"}
                 </button>
               </div>
             </div>

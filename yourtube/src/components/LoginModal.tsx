@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from './ui/button';
 import axiosInstance from '@/lib/axiosinstance';
 import { useUser } from '@/lib/AuthContext';
 import { GeoInfo } from '@/lib/useGeoTimeTheme';
+
+const phonePattern = /^\+?\d{10,15}$/;
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -17,20 +20,51 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [devOtpPreview, setDevOtpPreview] = useState('');
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setStep('input');
+      setOtp('');
+      setError('');
+      setDevOtpPreview('');
+    }
+  }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
 
   const isSouthIndia = geo.isSouthIndia;
+  const authChannelLabel = isSouthIndia ? "email" : "mobile";
+  const maskedIdentifier = identifier.trim();
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    const normalizedIdentifier = identifier.trim();
+    if (isSouthIndia && !normalizedIdentifier.includes('@')) {
+      setLoading(false);
+      setError('Please enter a valid email address.');
+      return;
+    }
+    if (!isSouthIndia && !phonePattern.test(normalizedIdentifier.replace(/[\s-]/g, ''))) {
+      setLoading(false);
+      setError('Please enter a valid mobile number.');
+      return;
+    }
+
     try {
-      await axiosInstance.post('/user/request-otp', {
-        identifier,
-        region: geo.region
+      const response = await axiosInstance.post('/user/request-otp', {
+        identifier: normalizedIdentifier,
+        state: geo.region,
       });
+      setDevOtpPreview(response.data?.devOtp || '');
       setStep('otp');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to send OTP');
@@ -45,12 +79,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
     setError('');
     try {
       const res = await axiosInstance.post('/user/verify-otp', {
-        identifier,
+        identifier: identifier.trim(),
         otp,
         name: identifier.split('@')[0], // Mock name
-        image: "https://github.com/shadcn.png"
+        image: "https://github.com/shadcn.png",
+        state: geo.region,
       });
       login(res.data.result);
+      setDevOtpPreview('');
       onClose();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid OTP');
@@ -59,9 +95,9 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
     }
   };
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md p-8 rounded-2xl shadow-2xl relative animate-in fade-in zoom-in duration-200 bg-background text-foreground border border-border">
+      <div className="relative w-full max-w-md rounded-2xl border border-border bg-background p-8 text-foreground shadow-2xl animate-in fade-in zoom-in duration-200 max-h-[calc(100vh-2rem)] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition text-xl"
@@ -75,7 +111,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
             Detected Region: <span className="font-semibold">{geo.region}</span>
           </p>
           <p className="text-xs mt-1 opacity-50 italic">
-            {isSouthIndia ? "Regional Auth: Email Required" : "Regional Auth: Mobile Required"}
+            {isSouthIndia ? "Regional Auth: Email OTP Required" : "Regional Auth: Mobile OTP Required"}
           </p>
         </div>
 
@@ -124,8 +160,20 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
                 onChange={(e) => setOtp(e.target.value)}
               />
               <p className="text-xs mt-3 opacity-50 text-center">
-                OTP has been sent to your registered {isSouthIndia ? "email" : "mobile"}.
+                OTP has been sent to your registered {authChannelLabel}
+                {maskedIdentifier ? (
+                  <>
+                    : <span className="font-medium break-all text-foreground/80">{maskedIdentifier}</span>
+                  </>
+                ) : (
+                  '.'
+                )}
               </p>
+              {devOtpPreview && (
+                <div className="mt-3 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center text-xs font-medium text-amber-200">
+                  Dev OTP preview: <span className="font-mono tracking-[0.2em]">{devOtpPreview}</span>
+                </div>
+              )}
             </div>
             <Button
               type="submit"
@@ -144,7 +192,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
           </form>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

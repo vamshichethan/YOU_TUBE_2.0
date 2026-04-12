@@ -1,5 +1,43 @@
 import video from "../Modals/video.js";
 
+const DEMO_FILEPATH = "uploads/2025-06-25T06-09-29.296Z-vdo.mp4";
+
+const ensureDemoVideos = async () => {
+  const existingVideos = await video.find();
+  if (existingVideos.length > 0) {
+    return existingVideos;
+  }
+
+  await video.insertMany([
+    {
+      videotitle: "Amazing Nature Explorers",
+      filename: "2025-06-25T06-09-29.296Z-vdo.mp4",
+      filepath: DEMO_FILEPATH,
+      filetype: "video/mp4",
+      filesize: "1024",
+      videochanel: "Nature Central",
+      uploader: "nature_user",
+      views: 1250,
+      Like: 24,
+      Dislike: 2,
+    },
+    {
+      videotitle: "Chef Master Healthy Pasta",
+      filename: "2025-06-25T06-09-29.296Z-vdo.mp4",
+      filepath: DEMO_FILEPATH,
+      filetype: "video/mp4",
+      filesize: "1024",
+      videochanel: "Foodies TV",
+      uploader: "chef_user",
+      views: 2400,
+      Like: 31,
+      Dislike: 1,
+    }
+  ]);
+
+  return video.find();
+};
+
 export const uploadvideo = async (req, res) => {
   if (req.file === undefined) {
     return res
@@ -26,29 +64,32 @@ export const uploadvideo = async (req, res) => {
 };
 export const getallvideo = async (req, res) => {
   try {
-    const files = await video.find();
-    if (files.length === 0) throw new Error("No videos found in DB");
+    const files = await ensureDemoVideos();
     return res.status(200).send(files);
   } catch (error) {
     console.warn("DB connection failed or empty, returning mock fallback data.");
     const mockVideos = [
       {
-        _id: "mock_1",
+        _id: "680000000000000000000001",
         videotitle: "Amazing Nature Explorers",
         videochanel: "Nature Central",
         uploader: "nature_user",
         views: 1250,
         createdAt: new Date().toISOString(),
-        filepath: "uploads/sample.mp4"
+        filepath: DEMO_FILEPATH,
+        Like: 24,
+        Dislike: 2,
       },
       {
-        _id: "mock_2",
+        _id: "680000000000000000000002",
         videotitle: "Chef Master: Healthy Pasta",
         videochanel: "Foodies TV",
         uploader: "chef_user",
         views: 2400,
         createdAt: new Date(Date.now() - 86400000).toISOString(),
-        filepath: "uploads/sample.mp4"
+        filepath: DEMO_FILEPATH,
+        Like: 31,
+        Dislike: 1,
       }
     ];
     return res.status(200).send(mockVideos);

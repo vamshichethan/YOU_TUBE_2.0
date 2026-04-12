@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState } from "react";
 import { useUser } from "@/lib/AuthContext";
 import PremiumModal from "./PremiumModal";
 import { useRouter } from "next/router";
@@ -24,6 +24,7 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
   // Gesture State Refs
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
   const clickCountRef = useRef(0);
+  const lastZoneRef = useRef<'left' | 'center' | 'right' | null>(null);
 
   // Time limits in seconds based on plan
   const getLimitInSeconds = (plan: string) => {
@@ -56,81 +57,126 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
     setTimeout(() => setVisualFeedback(null), 800);
   };
 
-  const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Determine which zone was clicked based on X coordinate relative to the container width
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
+  const getZoneFromPointer = (clientX: number, container: HTMLDivElement) => {
+    const rect = container.getBoundingClientRect();
+    const x = clientX - rect.left;
     const width = rect.width;
-    
+
     let zone: 'left' | 'center' | 'right' = 'center';
     if (x < width * 0.33) zone = 'left';
     else if (x > width * 0.66) zone = 'right';
 
+    return zone;
+  };
+
+  const goToNextVideo = () => {
+    if (!allVideos?.length) {
+      executeVisualFeedback("No next video");
+      return;
+    }
+
+    const currentIndex = allVideos.findIndex((item) => item._id === video._id);
+    const nextVideo = allVideos[(currentIndex + 1) % allVideos.length];
+
+    if (!nextVideo || nextVideo._id === video._id) {
+      executeVisualFeedback("No next video");
+      return;
+    }
+
+    executeVisualFeedback("Next Video");
+    setTimeout(() => router.push(`/watch/${nextVideo._id}`), 300);
+  };
+
+  const closeWebsite = () => {
+    executeVisualFeedback("Closing Website");
+    window.close();
+
+    setTimeout(() => {
+      if (!window.closed) {
+        router.push("/");
+      }
+    }, 350);
+  };
+
+  const openComments = () => {
+    executeVisualFeedback("Opening Comments");
+    const commentSection = document.getElementById("comments-section");
+    if (commentSection) {
+      commentSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleGestureTap = (clientX: number, container: HTMLDivElement) => {
+    const zone = getZoneFromPointer(clientX, container);
+
+    if (lastZoneRef.current !== zone) {
+      clickCountRef.current = 0;
+      lastZoneRef.current = zone;
+    }
+
     clickCountRef.current += 1;
 
     if (clickTimerRef.current) {
-        clearTimeout(clickTimerRef.current);
+      clearTimeout(clickTimerRef.current);
     }
 
     clickTimerRef.current = setTimeout(() => {
-        const count = clickCountRef.current;
-        clickCountRef.current = 0; // reset
+      const count = clickCountRef.current;
+      clickCountRef.current = 0;
+      lastZoneRef.current = null;
 
-        if (count === 1) {
-             if (zone === 'center') {
-                 // Single tap center: Play/Pause
-                 if (videoRef.current) {
-                     if (videoRef.current.paused) {
-                         videoRef.current.play();
-                         executeVisualFeedback("▶ Play");
-                     } else {
-                         videoRef.current.pause();
-                         executeVisualFeedback("⏸ Pause");
-                     }
-                 }
-             }
-        } 
-        else if (count === 2) {
-             if (zone === 'left') {
-                 // Double tap left: Rewind 10s
-                 if (videoRef.current) {
-                     videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
-                     executeVisualFeedback("⏪ -10s");
-                 }
-             } else if (zone === 'right') {
-                 // Double tap right: Fast forward 10s
-                 if (videoRef.current) {
-                     videoRef.current.currentTime = Math.min(videoRef.current.duration, videoRef.current.currentTime + 10);
-                     executeVisualFeedback("⏩ +10s");
-                 }
-             }
-        } 
-        else if (count >= 3) {
-             if (zone === 'right') {
-                 // Triple tap right: Close website (Route to Home)
-                 executeVisualFeedback("Closing Player...");
-                 setTimeout(() => router.push('/'), 300);
-             } else if (zone === 'left') {
-                 // Triple tap left: Open comment section
-                 executeVisualFeedback("Going to Comments");
-                 const commentSection = document.getElementById('comments-section');
-                 if (commentSection) {
-                     commentSection.scrollIntoView({ behavior: 'smooth' });
-                 }
-             } else if (zone === 'center') {
-                 // Triple tap center: Skip to next video
-                 if (allVideos && allVideos.length > 1) {
-                     executeVisualFeedback("⏭ Next Video");
-                     const currentIndex = allVideos.findIndex(v => v._id === video._id);
-                     const nextIndex = (currentIndex + 1) % allVideos.length;
-                     const nextVideo = allVideos[nextIndex];
-                     if (nextVideo) {
-                        setTimeout(() => router.push(`/watch/${nextVideo._id}`), 300);
-                     }
-                 }
-             }
+      if (count === 1 && zone === "center" && videoRef.current) {
+        if (videoRef.current.paused) {
+          videoRef.current.play();
+          executeVisualFeedback("Play");
+        } else {
+          videoRef.current.pause();
+          executeVisualFeedback("Pause");
         }
-    }, 250); // 250ms window to bundle clicks together
+        return;
+      }
+
+      if (count === 2 && videoRef.current) {
+        if (zone === "left") {
+          videoRef.current.currentTime = Math.max(0, videoRef.current.currentTime - 10);
+          executeVisualFeedback("-10s");
+          return;
+        }
+
+        if (zone === "right") {
+          const duration = Number.isFinite(videoRef.current.duration) ? videoRef.current.duration : videoRef.current.currentTime + 10;
+          videoRef.current.currentTime = Math.min(duration, videoRef.current.currentTime + 10);
+          executeVisualFeedback("+10s");
+          return;
+        }
+      }
+
+      if (count >= 3) {
+        if (zone === "left") {
+          openComments();
+          return;
+        }
+
+        if (zone === "center") {
+          goToNextVideo();
+          return;
+        }
+
+        if (zone === "right") {
+          closeWebsite();
+        }
+      }
+    }, 260);
+  };
+
+  const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    handleGestureTap(e.clientX, e.currentTarget);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    handleGestureTap(touch.clientX, e.currentTarget);
   };
 
   return (
@@ -141,6 +187,7 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
         <div 
            className="absolute top-0 left-0 right-0 bottom-[15%] z-10 cursor-pointer"
            onClick={handleZoneClick}
+           onTouchEnd={handleTouchEnd}
            onDoubleClick={(e) => e.preventDefault()} // prevent natural zoom on double tap
         />
 

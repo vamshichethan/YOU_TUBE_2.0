@@ -1,10 +1,15 @@
 import { useState, useEffect } from 'react';
 
+const SOUTH_INDIA_STATES = ["Tamil Nadu", "Kerala", "Karnataka", "Andhra Pradesh", "Telangana"];
+const THEME_STORAGE_KEY = "theme_preference";
+
 export interface GeoInfo {
   region: string;
   isSouthIndia: boolean;
   isCorrectTime: boolean;
   theme: 'light' | 'dark';
+  themePreference: 'auto' | 'light' | 'dark';
+  setThemePreference: (value: 'auto' | 'light' | 'dark') => void;
 }
 
 export const useGeoTimeTheme = () => {
@@ -12,34 +17,62 @@ export const useGeoTimeTheme = () => {
     region: 'Unknown',
     isSouthIndia: false,
     isCorrectTime: false,
-    theme: 'dark'
+    theme: 'dark',
+    themePreference: 'auto',
+    setThemePreference: () => {},
   });
 
   useEffect(() => {
     const fetchGeo = async () => {
+      const savedPreference =
+        typeof window !== "undefined"
+          ? (localStorage.getItem(THEME_STORAGE_KEY) as 'auto' | 'light' | 'dark' | null)
+          : null;
+
       try {
         const res = await fetch('https://ipapi.co/json/');
         const data = await res.json();
         const region = data.region || 'Unknown';
-        
-        const southIndiaStates = ["Tamil Nadu", "Kerala", "Karnataka", "Andhra Pradesh", "Telangana"];
-        const isSouthIndia = southIndiaStates.includes(region);
+        const isSouthIndia = SOUTH_INDIA_STATES.includes(region);
 
-        // Check IST Time (10:00 AM - 12:00 PM)
-        const now = new Date();
-        const istOffset = 5.5 * 60 * 60 * 1000;
-        const istTime = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffset);
-        const hours = istTime.getHours();
-        const isCorrectTime = hours >= 10 && hours < 12;
+        const timeInIST = new Intl.DateTimeFormat('en-GB', {
+          timeZone: 'Asia/Kolkata',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).formatToParts(new Date());
 
-        const theme = (isSouthIndia && isCorrectTime) ? 'light' : 'dark';
+        const hourValue = Number(timeInIST.find((part) => part.type === 'hour')?.value || '0');
+        const minuteValue = Number(timeInIST.find((part) => part.type === 'minute')?.value || '0');
+        const totalMinutes = (hourValue * 60) + minuteValue;
+        const isCorrectTime = totalMinutes >= 600 && totalMinutes < 720;
+
+        const autoTheme = (isSouthIndia && isCorrectTime) ? 'light' : 'dark';
+        const theme = savedPreference && savedPreference !== 'auto' ? savedPreference : autoTheme;
 
         setGeoInfo({
           region,
           isSouthIndia,
           isCorrectTime,
-          theme
+          theme,
+          themePreference: savedPreference || 'auto',
+          setThemePreference: (value) => {
+            const appliedTheme = value === 'auto' ? autoTheme : value;
+            localStorage.setItem(THEME_STORAGE_KEY, value);
+            setGeoInfo((prev) => ({
+              ...prev,
+              themePreference: value,
+              theme: appliedTheme,
+            }));
+
+            document.documentElement.classList.remove('light', 'dark');
+            document.documentElement.classList.add(appliedTheme);
+          },
         });
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('detected_region', region);
+        }
 
         // Apply theme to document
         if (theme === 'light') {
@@ -52,11 +85,29 @@ export const useGeoTimeTheme = () => {
       } catch (error) {
         console.warn("Geo sensing failed (likely blocked), using defaults.");
         setGeoInfo({
-          region: 'Karnataka',
-          isSouthIndia: true,
-          isCorrectTime: true,
-          theme: 'dark' // Keep it safe
+          region: 'Unknown',
+          isSouthIndia: false,
+          isCorrectTime: false,
+          theme: savedPreference && savedPreference !== 'auto' ? savedPreference : 'dark',
+          themePreference: savedPreference || 'auto',
+          setThemePreference: (value) => {
+            const appliedTheme = value === 'auto' ? 'dark' : value;
+            localStorage.setItem(THEME_STORAGE_KEY, value);
+            setGeoInfo((prev) => ({
+              ...prev,
+              themePreference: value,
+              theme: appliedTheme,
+            }));
+
+            document.documentElement.classList.remove('light', 'dark');
+            document.documentElement.classList.add(appliedTheme);
+          },
         });
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('detected_region', 'Unknown');
+        }
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(savedPreference && savedPreference !== 'auto' ? savedPreference : 'dark');
       }
     };
 

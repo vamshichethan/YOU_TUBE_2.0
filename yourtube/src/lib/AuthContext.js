@@ -6,6 +6,10 @@ import axiosInstance from "./axiosinstance";
 import { useEffect, useContext } from "react";
 
 const UserContext = createContext();
+const getDetectedState = () => {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("detected_region") || "";
+};
 
 export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -31,6 +35,7 @@ export const UserProvider = ({ children }) => {
         email: firebaseuser.email,
         name: firebaseuser.displayName,
         image: firebaseuser.photoURL || "https://github.com/shadcn.png",
+        state: getDetectedState(),
       };
       const response = await axiosInstance.post("/user/login", payload);
       login(response.data.result);
@@ -46,6 +51,7 @@ export const UserProvider = ({ children }) => {
             email: firebaseuser.email,
             name: firebaseuser.displayName,
             image: firebaseuser.photoURL || "https://github.com/shadcn.png",
+            state: getDetectedState(),
           };
           const response = await axiosInstance.post("/user/login", payload);
           login(response.data.result);

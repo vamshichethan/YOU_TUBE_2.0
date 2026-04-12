@@ -19,7 +19,7 @@ const Sidebar = () => {
 
   const [isdialogeopen, setisdialogeopen] = useState(false);
   return (
-    <aside className="w-64 bg-sidebar border-r border-sidebar-border min-h-screen p-2 transition-colors duration-500">
+    <aside className="w-64 min-h-screen border-r border-sidebar-border bg-sidebar text-sidebar-foreground p-2 transition-colors duration-500">
       <nav className="space-y-1">
         <Link href="/">
           <Button variant="ghost" className="w-full justify-start hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
@@ -68,7 +68,7 @@ const Sidebar = () => {
                 </Button>
               </Link>
               {user?.channelname ? (
-                <Link href={`/channel/${user.id}`}>
+                <Link href={`/channel/${user._id}`}>
                   <Button variant="ghost" className="w-full justify-start hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
                     <User className="w-5 h-5 mr-3" />
                     Your channel

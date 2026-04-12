@@ -13,6 +13,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   const { user } = useUser();
   const [selectedPlan, setSelectedPlan] = useState<"Bronze" | "Silver" | "Gold">(defaultPlan || "Silver");
   const [isProcessing, setIsProcessing] = useState(false);
+  const currentPlan = user?.plan || "Free";
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -27,13 +28,53 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   if (!isOpen) return null;
 
   const handleUpgrade = async () => {
+    if (!user?._id) {
+      alert("Please sign in before upgrading your plan.");
+      return;
+    }
+
     try {
       setIsProcessing(true);
       const orderRes = await axiosInstance.post("/payment/create-order", { plan: selectedPlan });
       const order = orderRes.data;
+      const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mockKeyId123";
+
+      if (order.mockMode || razorpayKey.includes("mock")) {
+        const mockPaymentId = `pay_mock_${Date.now()}`;
+        const encoder = new TextEncoder();
+        const signaturePayload = `${order.id}|${mockPaymentId}`;
+        const key = await crypto.subtle.importKey(
+          "raw",
+          encoder.encode("mockSecretKey456"),
+          { name: "HMAC", hash: "SHA-256" },
+          false,
+          ["sign"]
+        );
+        const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(signaturePayload));
+        const mockSignature = Array.from(new Uint8Array(signatureBuffer))
+          .map((byte) => byte.toString(16).padStart(2, "0"))
+          .join("");
+
+        const verifyRes = await axiosInstance.post("/payment/verify", {
+          razorpay_order_id: order.id,
+          razorpay_payment_id: mockPaymentId,
+          razorpay_signature: mockSignature,
+          userId: user?._id,
+          plan: selectedPlan
+        });
+
+        if (verifyRes.data.plan === selectedPlan) {
+          const invoiceId = verifyRes.data.invoice?.invoiceId;
+          alert(`Test payment successful! You are now on the ${selectedPlan} Plan. Invoice ${invoiceId || ""} has been emailed to ${user?.email}.`);
+          onClose();
+          window.location.reload();
+        }
+        setIsProcessing(false);
+        return;
+      }
 
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mockKeyId123",
+        key: razorpayKey,
         amount: order.amount,
         currency: order.currency,
         name: "YourTube Premium",
@@ -49,7 +90,8 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
               plan: selectedPlan
             });
             if (verifyRes.data.plan === selectedPlan) {
-              alert(`Payment successful! You are now on the ${selectedPlan} Plan. You will also receive an email receipt shortly.`);
+              const invoiceId = verifyRes.data.invoice?.invoiceId;
+              alert(`Payment successful! You are now on the ${selectedPlan} Plan. Invoice ${invoiceId || ""} has been emailed to ${user?.email}.`);
               onClose();
               window.location.reload();
             }
@@ -82,9 +124,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   };
 
   const plans = [
-     { name: "Bronze", price: 10, limit: "7 minutes of video", color: "bg-amber-600" },
-     { name: "Silver", price: 50, limit: "10 minutes of video", color: "bg-slate-500" },
-     { name: "Gold", price: 100, limit: "Unlimited times & downloads", color: "bg-yellow-500" }
+     { name: "Bronze", price: 10, limit: "7 minutes per video", color: "bg-amber-600" },
+     { name: "Silver", price: 50, limit: "10 minutes per video", color: "bg-slate-500" },
+     { name: "Gold", price: 100, limit: "Unlimited watch time", color: "bg-yellow-500" }
   ];
 
   return (
@@ -99,8 +141,11 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tight">Upgrade Your Plan</h2>
           <p className="text-gray-600 mb-6">
-            Choose a plan that fits your viewing habits to unlock more watch time and downloads.
+            Free users can watch up to 5 minutes per video. Upgrade for more viewing time and instant invoice confirmation by email.
           </p>
+          <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
+            Current plan: <span className="font-bold text-black">{currentPlan}</span>
+          </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {plans.map((p) => (
@@ -114,7 +159,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
                  <div className="text-2xl font-black my-2">₹{p.price}</div>
                  <p className="text-sm text-gray-600 min-h-[40px]">{p.limit}</p>
                  <div className="mt-4 w-full text-xs font-semibold py-1.5 rounded-full border border-gray-300">
-                    {selectedPlan === p.name ? "Selected" : "Select"}
+                    {currentPlan === p.name ? "Current Plan" : selectedPlan === p.name ? "Selected" : "Select"}
                  </div>
               </div>
             ))}
@@ -122,13 +167,13 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
 
           <Button
             onClick={handleUpgrade}
-            disabled={isProcessing}
+            disabled={isProcessing || currentPlan === selectedPlan}
             className={`w-full mt-8 font-semibold py-6 text-lg rounded-xl shadow-lg transition-transform hover:scale-[1.02] text-white ${selectedPlan === 'Gold' ? 'bg-yellow-500 hover:bg-yellow-600' : selectedPlan === 'Silver' ? 'bg-slate-600 hover:bg-slate-700' : 'bg-amber-600 hover:bg-amber-700'}`}
           >
-            {isProcessing ? "Processing..." : `Upgrade to ${selectedPlan} (₹${plans.find(p => p.name === selectedPlan)?.price})`}
+            {isProcessing ? "Processing..." : currentPlan === selectedPlan ? `${selectedPlan} is Active` : `Upgrade to ${selectedPlan} (₹${plans.find(p => p.name === selectedPlan)?.price})`}
           </Button>
           <p className="text-xs text-gray-400 mt-4">
-            This is a complete simulation via Razorpay test mode. No actual money required. Invoice email will be generated.
+            Payments run through Razorpay test mode here, and successful upgrades trigger an invoice email with the plan, amount, and payment details.
           </p>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { Bell, Menu, Mic, Search, User, VideoIcon, Phone } from "lucide-react";
+import { Bell, Menu, Mic, Moon, Search, Sun, User, VideoIcon, Phone } from "lucide-react";
 import React, { useState } from "react";
 import { Button } from "./ui/button";
 import Link from "next/link";
@@ -33,7 +33,6 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
     router.push(`/call/${roomId}`);
   };
 
-  const isLight = geo?.theme === 'light';
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
@@ -45,9 +44,14 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
       handleSearch(e as any);
     }
   };
+
+  const toggleTheme = () => {
+    if (!geo) return;
+    geo.setThemePreference(geo.theme === "dark" ? "light" : "dark");
+  };
   
   return (
-    <header className="flex items-center justify-between px-4 py-2 border-b border-border bg-background transition-colors duration-500 sticky top-0 z-50">
+    <header className="sticky top-0 z-50 flex items-center justify-between border-b border-border bg-background/95 px-4 py-2 text-foreground backdrop-blur transition-colors duration-500">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon">
           <Menu className="w-6 h-6" />
@@ -87,6 +91,11 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
         </Button>
       </form>
       <div className="flex items-center gap-2">
+        {geo && (
+          <Button variant="ghost" size="icon" className="rounded-full" onClick={toggleTheme} title={`Switch to ${geo.theme === "dark" ? "light" : "dark"} mode`}>
+            {geo.theme === "dark" ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+          </Button>
+        )}
         {user ? (
           <>
             <Button variant="ghost" size="icon" onClick={handleStartCall} title="Start a Video Call">
