@@ -26,7 +26,6 @@ const VideoInfo = ({ video }: any) => {
   const [downloadStatus, setDownloadStatus] = useState<string | null>(null);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [subscriberCount, setSubscriberCount] = useState(1200000);
-  const channelName = video?.videochanel;
 
   // const user: any = {
   //   id: "1",
@@ -40,24 +39,6 @@ const VideoInfo = ({ video }: any) => {
     setIsLiked(false);
     setIsDisliked(false);
   }, [video]);
-
-  useEffect(() => {
-    const fetchSubscriptionStatus = async () => {
-      if (!channelName) return;
-
-      try {
-        const res = await axiosInstance.get("/user/subscription-status", {
-          params: { channelName },
-        });
-        setIsSubscribed(Boolean(res.data.subscribed));
-        setSubscriberCount(Number(res.data.subscriberCount || 0));
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    fetchSubscriptionStatus();
-  }, [channelName, user?._id]);
 
   useEffect(() => {
     const handleviews = async () => {
@@ -124,21 +105,14 @@ const VideoInfo = ({ video }: any) => {
     }
   };
 
-  const handleSubscribe = async () => {
+  const handleSubscribe = () => {
     if (!user) {
       alert("Please sign in to subscribe");
       return;
     }
 
-    try {
-      const res = await axiosInstance.post("/user/toggle-subscription", {
-        channelName,
-      });
-      setIsSubscribed(Boolean(res.data.subscribed));
-      setSubscriberCount(Number(res.data.subscriberCount || 0));
-    } catch (error: any) {
-      alert(error.response?.data?.message || "Failed to update subscription.");
-    }
+    setIsSubscribed((prev) => !prev);
+    setSubscriberCount((prev) => prev + (isSubscribed ? -1 : 1));
   };
 
   const handleDownload = async () => {
@@ -190,7 +164,7 @@ const VideoInfo = ({ video }: any) => {
             <AvatarFallback>{video.videochanel[0]}</AvatarFallback>
           </Avatar>
           <div>
-            <h3 className="font-semibold">{channelName}</h3>
+            <h3 className="font-semibold">{video.videochanel}</h3>
             <p className="text-sm text-muted-foreground transition-colors duration-500">{subscriberCount.toLocaleString()} subscribers</p>
           </div>
           <Button className="ml-4" onClick={handleSubscribe} variant={isSubscribed ? "secondary" : "default"}>

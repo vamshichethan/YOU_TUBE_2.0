@@ -10,7 +10,6 @@ const userschema = mongoose.Schema({
   phone: { type: String },
   state: { type: String },
   authMethod: { type: String, enum: ["email_otp", "sms_otp", "google"], default: "email_otp" },
-  subscribedChannels: { type: [String], default: [] },
 });
 
 export default mongoose.model("user", userschema);
