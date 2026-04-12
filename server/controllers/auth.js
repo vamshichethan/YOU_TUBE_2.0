@@ -15,6 +15,9 @@ const transporter = process.env.SMTP_HOST
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT || 587),
       secure: process.env.SMTP_SECURE === "true",
+      connectionTimeout: DELIVERY_TIMEOUT_MS,
+      greetingTimeout: DELIVERY_TIMEOUT_MS,
+      socketTimeout: DELIVERY_TIMEOUT_MS,
       auth: process.env.SMTP_USER
         ? {
             user: process.env.SMTP_USER,

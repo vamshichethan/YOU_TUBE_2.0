@@ -3,6 +3,8 @@ import crypto from "crypto";
 import User from "../Modals/Auth.js";
 import nodemailer from "nodemailer";
 
+const SMTP_TIMEOUT_MS = 10000;
+
 const razorpayInstance = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_mockKeyId123",
   key_secret: process.env.RAZORPAY_SECRET || "mockSecretKey456"
@@ -14,6 +16,9 @@ const transporter = process.env.SMTP_HOST
       host: process.env.SMTP_HOST,
       port: Number(process.env.SMTP_PORT || 587),
       secure: process.env.SMTP_SECURE === "true",
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
       auth: process.env.SMTP_USER
         ? {
             user: process.env.SMTP_USER,
