@@ -34,13 +34,14 @@ const configuredOrigins = [
 const allowedOriginPatterns = [
   /^http:\/\/localhost(?::\d+)?$/i,
   /^https:\/\/(?:.+\.)?vercel\.app$/i,
+  /^https:\/\/(?:.+\.)?onrender\.com$/i,
 ];
 
 const isOriginAllowed = (origin) =>
   configuredOrigins.includes(origin) ||
   allowedOriginPatterns.some((pattern) => pattern.test(origin));
 
-app.use(cors({
+const corsOptions = {
   origin(origin, callback) {
     if (!origin || isOriginAllowed(origin)) {
       return callback(null, true);
@@ -48,7 +49,12 @@ app.use(cors({
     return callback(null, false);
   },
   credentials: true,
-}));
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "userid"],
+};
+
+app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
 app.use("/uploads", express.static(uploadsDirectory));
