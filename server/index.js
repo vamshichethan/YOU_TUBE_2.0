@@ -6,6 +6,7 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
 import { MongoMemoryServer } from "mongodb-memory-server";
+import { fileURLToPath } from "url";
 import userroutes from "./routes/auth.js";
 import videoroutes from "./routes/video.js";
 import likeroutes from "./routes/like.js";
@@ -17,15 +18,32 @@ import downloadroutes from "./routes/download.js";
 dotenv.config();
 const app = express();
 import path from "path";
-const allowedOrigins = [
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDirectory = path.join(__dirname, "uploads");
+
+const configuredOrigins = [
   process.env.FRONTEND_URL,
   process.env.FRONTEND_PREVIEW_URL,
-  "http://localhost:3000",
-].filter(Boolean);
+  process.env.ALLOWED_ORIGINS,
+]
+  .filter(Boolean)
+  .flatMap((value) => value.split(","))
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const allowedOriginPatterns = [
+  /^http:\/\/localhost(?::\d+)?$/i,
+  /^https:\/\/(?:.+\.)?vercel\.app$/i,
+];
+
+const isOriginAllowed = (origin) =>
+  configuredOrigins.includes(origin) ||
+  allowedOriginPatterns.some((pattern) => pattern.test(origin));
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (!origin || isOriginAllowed(origin)) {
       return callback(null, true);
     }
     return callback(null, false);
@@ -34,7 +52,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
-app.use("/uploads", express.static(path.join("uploads")));
+app.use("/uploads", express.static(uploadsDirectory));
 app.get("/", (req, res) => {
   res.send("You tube backend is working");
 });

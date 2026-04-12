@@ -14,6 +14,8 @@
 4. Start command: `npm start`
 5. Add env vars from [server/.env.example](/Users/vamshi/Desktop/YOU_TUBE_2.0-main/server/.env.example).
 6. After deploy, copy the backend URL.
+7. Set `FRONTEND_URL` to your main Vercel domain. If you use multiple aliases or preview domains, add them to `ALLOWED_ORIGINS` as a comma-separated list.
+8. For OTP delivery, set `BREVO_API_KEY` for email and `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` for SMS.
 
 ## Frontend on Vercel
 
@@ -25,7 +27,8 @@
 
 ## Important notes
 
-- Add your Vercel frontend URL to `FRONTEND_URL` on the backend.
+- Add your Vercel frontend URL to `FRONTEND_URL` on the backend. `ALLOWED_ORIGINS` can hold extra Vercel aliases if needed.
 - Socket.io calls use the same backend URL, so `NEXT_PUBLIC_BACKEND_URL` must be correct.
-- Payment and email features need real Razorpay and SMTP credentials in production.
-- SMS OTP for non-South-India users can use `TEXTBELT_API_KEY` or your own SMS API endpoint.
+- Payment features need real Razorpay credentials in production.
+- OTP email uses Brevo when `BREVO_API_KEY` is set, with SMTP as a fallback option.
+- OTP SMS uses Twilio when `TWILIO_*` variables are set, with custom SMS APIs still supported as a fallback.
