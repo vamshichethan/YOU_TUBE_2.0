@@ -28,14 +28,14 @@ const normalizeState = (value = "") => value.trim();
 const isDatabaseReady = () => mongoose.connection.readyState === 1;
 const isSouthIndiaState = (state = "") => SOUTH_INDIA_STATES.includes(normalizeState(state));
 const isDevelopmentOtpPreviewEnabled =
-  process.env.NODE_ENV !== "production" &&
-  (process.env.SHOW_DEV_OTP ?? "true") === "true";
+  process.env.SHOW_DEV_OTP === "true" ||
+  (process.env.NODE_ENV !== "production" && (process.env.SHOW_DEV_OTP ?? "true") === "true");
 const hasBrevoConfigured = Boolean(process.env.BREVO_API_KEY);
 const hasEmailDeliveryConfigured = hasBrevoConfigured || Boolean(process.env.SMTP_HOST);
 const hasTwilioConfigured = Boolean(
   process.env.TWILIO_ACCOUNT_SID &&
     process.env.TWILIO_AUTH_TOKEN &&
-    process.env.TWILIO_FROM_NUMBER
+    (process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER)
 );
 const hasSmsDeliveryConfigured =
   hasTwilioConfigured ||
@@ -48,6 +48,17 @@ const resolveOtpChannel = (identifier = "", state = "") => {
   }
 
   return isSouthIndiaState(state) ? "email" : "mobile";
+};
+
+const normalizeIdentifier = (identifier = "", channel = "email") => {
+  const trimmed = identifier.trim();
+  if (channel !== "mobile") return trimmed;
+
+  const compact = trimmed.replace(/[\s-]/g, "");
+  if (/^\d{10}$/.test(compact)) {
+    return `+91${compact}`;
+  }
+  return compact;
 };
 
 const buildFallbackUser = ({ identifier, name, image, state, isEmailOtp }) => {
@@ -133,7 +144,7 @@ const sendMobileOtp = async (phone, otp, state) => {
       const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${process.env.TWILIO_ACCOUNT_SID}/Messages.json`;
       const payload = new URLSearchParams({
         To: phone,
-        From: process.env.TWILIO_FROM_NUMBER,
+        From: process.env.TWILIO_FROM_NUMBER || process.env.TWILIO_PHONE_NUMBER,
         Body: message,
       });
 
@@ -215,9 +226,10 @@ const sendMobileOtp = async (phone, otp, state) => {
 
 export const requestOTP = async (req, res) => {
   const { identifier, state } = req.body;
-  const normalizedIdentifier = identifier?.trim();
   const normalizedState = normalizeState(state);
-  const otpChannel = resolveOtpChannel(normalizedIdentifier, normalizedState);
+  const requestedIdentifier = identifier?.trim() || "";
+  const otpChannel = resolveOtpChannel(requestedIdentifier, normalizedState);
+  const normalizedIdentifier = normalizeIdentifier(requestedIdentifier, otpChannel);
 
   if (!normalizedIdentifier) {
     return res.status(400).json({ message: "Identifier is required." });
@@ -227,7 +239,7 @@ export const requestOTP = async (req, res) => {
     return res.status(400).json({ message: "A valid email address is required to receive OTP." });
   }
 
-  if (otpChannel === "mobile" && !phonePattern.test(normalizedIdentifier.replace(/[\s-]/g, ""))) {
+  if (otpChannel === "mobile" && !phonePattern.test(normalizedIdentifier)) {
     return res.status(400).json({ message: "A valid mobile number is required to receive OTP." });
   }
 
@@ -277,7 +289,9 @@ export const requestOTP = async (req, res) => {
 
 export const verifyOTP = async (req, res) => {
   const { identifier, otp, name, image, state } = req.body;
-  const normalizedIdentifier = identifier?.trim();
+  const normalizedState = normalizeState(state);
+  const otpChannel = resolveOtpChannel(identifier?.trim() || "", normalizedState);
+  const normalizedIdentifier = normalizeIdentifier(identifier || "", otpChannel);
   const otpRecord = otpCache.get(normalizedIdentifier);
 
   if (otpRecord && otpRecord.otp === otp && otpRecord.expiresAt > Date.now()) {
