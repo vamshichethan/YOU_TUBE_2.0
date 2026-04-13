@@ -124,9 +124,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   };
 
   const plans = [
-     { name: "Bronze", price: 10, limit: "Unlock unlimited downloads", color: "bg-amber-600" },
-     { name: "Silver", price: 50, limit: "Unlock unlimited downloads + longer viewing", color: "bg-slate-500" },
-     { name: "Gold", price: 100, limit: "Unlimited downloads + unlimited watch time", color: "bg-yellow-500" }
+     { name: "Bronze", price: 10, limit: "Watch up to 7 minutes per video", color: "bg-amber-600" },
+     { name: "Silver", price: 50, limit: "Watch up to 10 minutes per video", color: "bg-slate-500" },
+     { name: "Gold", price: 100, limit: "Unlimited video watching time", color: "bg-yellow-500" }
   ];
 
   return (
@@ -141,7 +141,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tight">Upgrade Your Plan</h2>
           <p className="text-gray-600 mb-6">
-            Free users can download only one video per day. Upgrade through Razorpay test mode to unlock unlimited downloads and premium viewing benefits.
+            Free users can watch up to 5 minutes per video. Upgrade through Razorpay test mode to unlock longer viewing limits and premium access.
           </p>
           <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
             Current plan: <span className="font-bold text-black">{currentPlan}</span>
@@ -173,7 +173,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
             {isProcessing ? "Processing..." : currentPlan === selectedPlan ? `${selectedPlan} is Active` : `Upgrade to ${selectedPlan} (₹${plans.find(p => p.name === selectedPlan)?.price})`}
           </Button>
           <p className="text-xs text-gray-400 mt-4">
-            Payments run through Razorpay test mode here. Any paid plan unlocks unlimited downloads after successful payment verification.
+            Payments run through Razorpay test mode here. Successful upgrades update your plan instantly and trigger an invoice email with your plan details.
           </p>
         </div>
       </div>
