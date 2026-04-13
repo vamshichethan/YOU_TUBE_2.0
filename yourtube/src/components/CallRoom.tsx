@@ -65,7 +65,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
   const outgoingAudioCleanupRef = useRef<() => void>(() => undefined);
   const recordingCleanupRef = useRef<() => void>(() => undefined);
   const makingOfferRef = useRef(false);
-  const ignoreOfferRef = useRef(false);
+  const isInitiatorRef = useRef(false);
   const isMountedRef = useRef(true);
   const selfIdRef = useRef(`user_${Math.random().toString(36).slice(2, 9)}`);
 
@@ -248,6 +248,25 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     };
   };
 
+  const createAndSendOffer = async (socket: Socket, peerConnection: RTCPeerConnection) => {
+    if (makingOfferRef.current) return;
+
+    try {
+      makingOfferRef.current = true;
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      socket.emit("offer", {
+        senderId: selfIdRef.current,
+        sdp: peerConnection.localDescription,
+      });
+    } catch (error) {
+      console.error("Negotiation failed", error);
+      setStatusMessage("We couldn't start the call handshake. Please retry or rejoin the room.");
+    } finally {
+      makingOfferRef.current = false;
+    }
+  };
+
   useEffect(() => {
     isMountedRef.current = true;
 
@@ -280,23 +299,6 @@ export default function CallRoom({ roomId }: CallRoomProps) {
           }
         };
 
-        peerConnection.onnegotiationneeded = async () => {
-          try {
-            makingOfferRef.current = true;
-            const offer = await peerConnection.createOffer();
-            if (peerConnection.signalingState !== "stable") return;
-            await peerConnection.setLocalDescription(offer);
-            socket.emit("offer", {
-              senderId: selfIdRef.current,
-              sdp: peerConnection.localDescription,
-            });
-          } catch (error) {
-            console.error("Negotiation failed", error);
-          } finally {
-            makingOfferRef.current = false;
-          }
-        };
-
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         if (!isMountedRef.current) {
           stopStreamTracks(stream);
@@ -314,23 +316,33 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         await refreshOutgoingAudioTrack();
 
         socket.emit("join-room", roomId, selfIdRef.current);
-        setStatusMessage("Waiting for your friend to join this call.");
+        setStatusMessage("Joining the call room...");
 
-        socket.on("user-connected", (userId) => {
+        socket.on("room-joined", ({ participantCount }) => {
+          const isFirstParticipant = participantCount <= 1;
+          isInitiatorRef.current = isFirstParticipant;
+          setStatusMessage(
+            isFirstParticipant
+              ? "Waiting for your friend to join this call."
+              : "Joining an active room. Finalizing your connection..."
+          );
+        });
+
+        socket.on("user-connected", async ({ userId }) => {
           if (userId !== selfIdRef.current) {
+            isInitiatorRef.current = true;
             setStatusMessage("Another user joined. Setting up your video call.");
+            await createAndSendOffer(socket, peerConnection);
           }
         });
 
         socket.on("offer", async (payload) => {
           if (payload.senderId === selfIdRef.current) return;
 
-          const offerCollision =
-            makingOfferRef.current || peerConnection.signalingState !== "stable";
-          ignoreOfferRef.current = offerCollision;
-          if (offerCollision) return;
-
           try {
+            if (peerConnection.signalingState !== "stable") {
+              await peerConnection.setLocalDescription({ type: "rollback" });
+            }
             await peerConnection.setRemoteDescription(payload.sdp);
             const answer = await peerConnection.createAnswer();
             await peerConnection.setLocalDescription(answer);
@@ -356,7 +368,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         });
 
         socket.on("ice-candidate", async (payload) => {
-          if (payload.senderId === selfIdRef.current || ignoreOfferRef.current) return;
+          if (payload.senderId === selfIdRef.current) return;
 
           try {
             if (payload.candidate) {

@@ -5,7 +5,6 @@ import bodyParser from "body-parser";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
-import { fileURLToPath } from "url";
 import userroutes from "./routes/auth.js";
 import videoroutes from "./routes/video.js";
 import likeroutes from "./routes/like.js";
@@ -17,47 +16,19 @@ import downloadroutes from "./routes/download.js";
 dotenv.config();
 const app = express();
 import path from "path";
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const uploadsDirectory = path.join(__dirname, "uploads");
-
-const configuredOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.FRONTEND_PREVIEW_URL,
-  process.env.ALLOWED_ORIGINS,
-]
-  .filter(Boolean)
-  .flatMap((value) => value.split(","))
-  .map((value) => value.trim())
-  .filter(Boolean);
-
-const allowedOriginPatterns = [
-  /^http:\/\/localhost(?::\d+)?$/i,
-  /^https:\/\/(?:.+\.)?vercel\.app$/i,
-  /^https:\/\/(?:.+\.)?onrender\.com$/i,
-];
-
-const isOriginAllowed = (origin) =>
-  configuredOrigins.includes(origin) ||
-  allowedOriginPatterns.some((pattern) => pattern.test(origin));
 
 const corsOptions = {
-  origin(origin, callback) {
-    if (!origin || isOriginAllowed(origin)) {
-      return callback(null, true);
-    }
-    return callback(null, false);
-  },
+  origin: true,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "userid"],
+  allowedHeaders: ["Content-Type", "Authorization", "userid"]
 };
 
 app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "30mb", extended: true }));
 app.use(express.urlencoded({ limit: "30mb", extended: true }));
-app.use("/uploads", express.static(uploadsDirectory));
+app.use("/uploads", express.static(path.join("uploads")));
 app.get("/", (req, res) => {
   res.send("You tube backend is working");
 });
@@ -83,7 +54,19 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   socket.on("join-room", (roomId, userId) => {
     socket.join(roomId);
-    socket.to(roomId).emit("user-connected", userId);
+    const room = io.sockets.adapter.rooms.get(roomId);
+    const participantCount = room?.size || 1;
+
+    socket.emit("room-joined", {
+      roomId,
+      userId,
+      participantCount,
+    });
+
+    socket.to(roomId).emit("user-connected", {
+      userId,
+      participantCount,
+    });
 
     socket.on("offer", (payload) => {
       socket.to(roomId).emit("offer", payload);
@@ -107,38 +90,12 @@ server.listen(PORT, () => {
   console.log(`server running on port ${PORT}`);
 });
 
-const connectDatabase = async () => {
-  const configuredDbUrl = process.env.DB_URL;
-  const isLocalDatabaseTarget =
-    !configuredDbUrl ||
-    configuredDbUrl.includes("localhost") ||
-    configuredDbUrl.includes("127.0.0.1");
-  const shouldUseMemoryMongo =
-    process.env.USE_MEMORY_MONGO === "true" &&
-    process.env.NODE_ENV !== "production";
-
-  try {
-    if (shouldUseMemoryMongo) {
-      const { MongoMemoryServer } = await import("mongodb-memory-server");
-      const memoryServer = await MongoMemoryServer.create();
-      const memoryUri = memoryServer.getUri("yourtube");
-      await mongoose.connect(memoryUri);
-      console.log("MongoDB connected using in-memory fallback");
-      return;
-    }
-
-    if (isLocalDatabaseTarget) {
-      console.warn(
-        "Skipping database connection because no production-ready DB_URL is configured. API fallback data will be used."
-      );
-      return;
-    }
-
-    await mongoose.connect(configuredDbUrl);
-    console.log("MongoDB connected");
-  } catch (error) {
-    console.log("Database connection failed", error);
-  }
-};
-
-connectDatabase();
+const DBURL = process.env.DB_URL;
+mongoose
+  .connect(DBURL)
+  .then(() => {
+    console.log("Mongodb connected");
+  })
+  .catch((error) => {
+    console.log(error);
+  });
