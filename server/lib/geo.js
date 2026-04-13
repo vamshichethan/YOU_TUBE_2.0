@@ -66,9 +66,11 @@ export const getOtpChannelForState = (state = "") => (isSouthIndiaState(state) ?
 export const resolveRequestGeo = async (req) => {
   const requestIp = getRequestIp(req);
   const fallbackState = normalizeState(req.body?.state || req.query?.state || "");
+  const fallbackCity = normalizeState(req.body?.city || req.query?.city || "");
   const fallbackGeo = {
     ip: requestIp || "unknown",
     region: fallbackState || "Unknown",
+    city: fallbackCity || "Unknown city",
     isSouthIndia: isSouthIndiaState(fallbackState),
   };
 
@@ -98,9 +100,11 @@ export const resolveRequestGeo = async (req) => {
 
     const data = await response.json();
     const region = normalizeState(data?.region || fallbackState || "Unknown");
+    const city = normalizeState(data?.city || fallbackCity || "Unknown city");
     const resolvedGeo = {
       ip: requestIp,
       region: region || "Unknown",
+      city: city || "Unknown city",
       isSouthIndia: isSouthIndiaState(region),
     };
 

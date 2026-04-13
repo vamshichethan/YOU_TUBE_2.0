@@ -1,5 +1,6 @@
 import comment from "../Modals/comment.js";
 import mongoose from "mongoose";
+import { resolveRequestGeo } from "../lib/geo.js";
 
 const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}.,!?'"()-]+$/u;
 
@@ -9,7 +10,7 @@ const isValidCommentBody = (value = "") => {
 };
 
 export const postcomment = async (req, res) => {
-  const { videoid, userid, commentbody, usercommented, city } = req.body;
+  const { videoid, userid, commentbody, usercommented } = req.body;
 
   if (!isValidCommentBody(commentbody)) {
     return res.status(400).json({
@@ -18,12 +19,13 @@ export const postcomment = async (req, res) => {
     });
   }
 
+  const geo = await resolveRequestGeo(req);
   const postcomment = new comment({
     videoid,
     userid,
     commentbody: commentbody.trim(),
     usercommented,
-    city: city?.trim() || "Unknown city",
+    city: geo.city || "Unknown city",
   });
 
   try {
@@ -117,6 +119,9 @@ export const dislikeComment = async (req, res) => {
   try {
     let commentRecord = await comment.findById(id);
     if (!commentRecord) return res.status(404).json({ message: "Comment not found" });
+    if (commentRecord.userid?.toString() === userId) {
+      return res.status(400).json({ message: "You cannot dislike your own comment." });
+    }
 
     if (commentRecord.dislikes.includes(userId)) {
       commentRecord = await comment.findByIdAndUpdate(

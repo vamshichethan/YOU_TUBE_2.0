@@ -37,25 +37,13 @@ const Comments = ({ videoId }: any) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
-  const [userCity, setUserCity] = useState("Unknown city");
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
   const [translatingCommentId, setTranslatingCommentId] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("en");
 
   useEffect(() => {
     loadComments();
-    fetchUserCity();
   }, [videoId]);
-
-  const fetchUserCity = async () => {
-    try {
-      const res = await fetch('https://ipapi.co/json/');
-      const data = await res.json();
-      setUserCity(data.city || 'Unknown city');
-    } catch (error) {
-       setUserCity('Unknown city');
-    }
-  };
 
   const loadComments = async () => {
     try {
@@ -83,7 +71,6 @@ const Comments = ({ videoId }: any) => {
         userid: user._id,
         commentbody: newComment,
         usercommented: user.name,
-        city: userCity
       });
       if (res.data.comment) {
         await loadComments();
@@ -114,7 +101,9 @@ const Comments = ({ videoId }: any) => {
       } else {
          setComments(prev => prev.map(c => c._id === id ? res.data : c));
       }
-    } catch (err) { console.log(err); }
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Unable to dislike this comment right now.");
+    }
   };
 
   const handleTranslate = async (comment: Comment) => {
