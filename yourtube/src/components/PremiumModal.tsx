@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { useUser } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
@@ -14,15 +13,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   const { user } = useUser();
   const [selectedPlan, setSelectedPlan] = useState<"Bronze" | "Silver" | "Gold">(defaultPlan || "Silver");
   const [isProcessing, setIsProcessing] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const currentPlan = user?.plan || "Free";
-
-  useEffect(() => {
-    setMounted(true);
-    return () => {
-      setMounted(false);
-    };
-  }, []);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -34,7 +25,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
     };
   }, []);
 
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
 
   const handleUpgrade = async () => {
     if (!user?._id) {
@@ -133,14 +124,14 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   };
 
   const plans = [
-     { name: "Bronze", price: 10, limit: "7 minutes per video", color: "bg-amber-600" },
-     { name: "Silver", price: 50, limit: "10 minutes per video", color: "bg-slate-500" },
-     { name: "Gold", price: 100, limit: "Unlimited watch time", color: "bg-yellow-500" }
+     { name: "Bronze", price: 10, limit: "Unlock unlimited downloads", color: "bg-amber-600" },
+     { name: "Silver", price: 50, limit: "Unlock unlimited downloads + longer viewing", color: "bg-slate-500" },
+     { name: "Gold", price: 100, limit: "Unlimited downloads + unlimited watch time", color: "bg-yellow-500" }
   ];
 
-  return createPortal(
+  return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 md:p-8 max-h-[calc(100vh-2rem)] overflow-y-auto">
+      <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-black transition text-xl font-bold"
@@ -150,7 +141,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tight">Upgrade Your Plan</h2>
           <p className="text-gray-600 mb-6">
-            Free users can watch up to 5 minutes per video. Upgrade for more viewing time and instant invoice confirmation by email.
+            Free users can download only one video per day. Upgrade through Razorpay test mode to unlock unlimited downloads and premium viewing benefits.
           </p>
           <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
             Current plan: <span className="font-bold text-black">{currentPlan}</span>
@@ -182,12 +173,11 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
             {isProcessing ? "Processing..." : currentPlan === selectedPlan ? `${selectedPlan} is Active` : `Upgrade to ${selectedPlan} (₹${plans.find(p => p.name === selectedPlan)?.price})`}
           </Button>
           <p className="text-xs text-gray-400 mt-4">
-            Payments run through Razorpay test mode here, and successful upgrades trigger an invoice email with the plan, amount, and payment details.
+            Payments run through Razorpay test mode here. Any paid plan unlocks unlimited downloads after successful payment verification.
           </p>
         </div>
       </div>
-    </div>,
-    document.body
+    </div>
   );
 };
 

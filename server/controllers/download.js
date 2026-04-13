@@ -38,10 +38,11 @@ export const requestDownload = async (req, res) => {
     const isPremiumUser = PREMIUM_PLANS.has(user.plan || "Free");
 
     if (!isPremiumUser) {
+      const dayKey = getDayKey();
       const quotaReservation = await Download.findOneAndUpdate(
         {
           viewer: userId,
-          dayKey: getDayKey(),
+          dayKey,
           isFreeQuota: true,
         },
         {
@@ -49,8 +50,9 @@ export const requestDownload = async (req, res) => {
             videoId,
             viewer: userId,
             downloadedOn: new Date(),
-            dayKey: getDayKey(),
+            dayKey,
             isFreeQuota: true,
+            planAtDownload: user.plan || "Free",
           },
         },
         {
@@ -67,11 +69,22 @@ export const requestDownload = async (req, res) => {
           upgradeRequired: true,
         });
       }
+
+      const freeDownloadRecord = new Download({
+        videoId,
+        viewer: userId,
+        downloadedOn: new Date(),
+        dayKey,
+        isFreeQuota: false,
+        planAtDownload: user.plan || "Free",
+      });
+      await freeDownloadRecord.save();
     } else {
       const newDownload = new Download({
         videoId,
         viewer: userId,
         downloadedOn: new Date(),
+        planAtDownload: user.plan || "Free",
       });
       await newDownload.save();
     }

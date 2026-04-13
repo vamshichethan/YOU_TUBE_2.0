@@ -14,6 +14,8 @@ import { useUser } from "@/lib/AuthContext";
 import PremiumModal from "./PremiumModal";
 import axiosInstance from "@/lib/axiosinstance";
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
 const VideoInfo = ({ video }: any) => {
   const [likes, setlikes] = useState(video.Like || 0);
   const [dislikes, setDislikes] = useState(video.Dislike || 0);
@@ -124,9 +126,9 @@ const VideoInfo = ({ video }: any) => {
       setDownloadStatus("Preparing download...");
       await axiosInstance.post('/download/request', { videoId: video._id });
 
-      const videoUrl = typeof video.filepath === 'string' && video.filepath.startsWith('http') 
-         ? video.filepath 
-         : `http://localhost:5000/${video.filepath}`;
+      const videoUrl = typeof video.filepath === 'string' && video.filepath.startsWith('http')
+         ? video.filepath
+         : `${backendUrl}/${video.filepath}`;
 
       const response = await fetch(videoUrl);
       const blob = await response.blob();
@@ -139,7 +141,7 @@ const VideoInfo = ({ video }: any) => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setDownloadStatus(user.plan === "Free" ? "Free plan: 1 download used for today" : "Premium plan: unlimited downloads active");
+      setDownloadStatus(user.plan === "Free" ? "Free plan: 1 download used for today" : "Paid plan: unlimited downloads active");
       alert("Video downloaded! It's also accessible in your Downloads section.");
     } catch (error: any) {
       if (error.response && error.response.status === 403 && error.response.data && error.response.data.message === "DOWNLOAD_LIMIT_REACHED") {

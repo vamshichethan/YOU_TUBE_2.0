@@ -6,6 +6,7 @@ const downloadSchema = mongoose.Schema({
   downloadedOn: { type: Date, default: Date.now },
   dayKey: { type: String },
   isFreeQuota: { type: Boolean, default: false },
+  planAtDownload: { type: String, default: "Free" },
 });
 
 downloadSchema.index(

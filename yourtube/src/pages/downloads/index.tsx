@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axiosinstance";
 import { useUser } from "@/lib/AuthContext";
 
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+
 const DownloadsPage = () => {
   const { user } = useUser();
   const [downloadedVideos, setDownloadedVideos] = useState<any[]>([]);
@@ -68,7 +70,14 @@ const DownloadsPage = () => {
            {downloadedVideos.map((video) => (
              <a href={`/watch/${video._id}`} key={video._id} className="block group">
                <div className="w-full aspect-video bg-muted rounded-2xl overflow-hidden shadow-xl relative transition-all duration-500 group-hover:shadow-red-500/10 group-hover:-translate-y-1">
-                 <video src={typeof video.filepath === 'string' && video.filepath.startsWith('http') ? video.filepath : `http://localhost:5000/${video.filepath}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                 <video
+                   src={
+                     typeof video.filepath === 'string' && video.filepath.startsWith('http')
+                       ? video.filepath
+                       : `${backendUrl}/${video.filepath}`
+                   }
+                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                 />
                  <div className="absolute inset-0 bg-black/30 group-hover:bg-transparent transition-all duration-300"></div>
                </div>
                <div className="mt-5 flex gap-4">
