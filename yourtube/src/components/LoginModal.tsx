@@ -20,7 +20,6 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [statusMessage, setStatusMessage] = useState('');
   const [devOtpPreview, setDevOtpPreview] = useState('');
   const [mounted, setMounted] = useState(false);
 
@@ -33,7 +32,6 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
       setStep('input');
       setOtp('');
       setError('');
-      setStatusMessage('');
       setDevOtpPreview('');
     }
   }, [isOpen]);
@@ -41,28 +39,21 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
   if (!isOpen || !mounted) return null;
 
   const isSouthIndia = geo.isSouthIndia;
-  const normalizedIdentifier = identifier.trim();
-  const isEmailInput = normalizedIdentifier.includes('@');
-  const authChannelLabel = isEmailInput || isSouthIndia ? "email" : "mobile";
+  const authChannelLabel = isSouthIndia ? "email" : "mobile";
   const maskedIdentifier = identifier.trim();
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setStatusMessage('');
 
-    if (!normalizedIdentifier) {
-      setLoading(false);
-      setError('Please enter your email address or mobile number.');
-      return;
-    }
-    if (normalizedIdentifier.includes('@') && !/\S+@\S+\.\S+/.test(normalizedIdentifier)) {
+    const normalizedIdentifier = identifier.trim();
+    if (isSouthIndia && !normalizedIdentifier.includes('@')) {
       setLoading(false);
       setError('Please enter a valid email address.');
       return;
     }
-    if (!normalizedIdentifier.includes('@') && !phonePattern.test(normalizedIdentifier.replace(/[\s-]/g, ''))) {
+    if (!isSouthIndia && !phonePattern.test(normalizedIdentifier.replace(/[\s-]/g, ''))) {
       setLoading(false);
       setError('Please enter a valid mobile number.');
       return;
@@ -71,17 +62,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
     try {
       const response = await axiosInstance.post('/user/request-otp', {
         identifier: normalizedIdentifier,
-        state: geo.region,
       });
-      setStatusMessage(response.data?.message || 'OTP generated successfully.');
       setDevOtpPreview(response.data?.devOtp || '');
       setStep('otp');
     } catch (err: any) {
-      setError(
-        err.code === 'ECONNABORTED'
-          ? 'The server took too long to respond. Please try again in a few seconds.'
-          : err.response?.data?.message || 'Failed to send OTP'
-      );
+      setError(err.response?.data?.message || 'Failed to send OTP');
     } finally {
       setLoading(false);
     }
@@ -91,14 +76,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    setStatusMessage('');
     try {
       const res = await axiosInstance.post('/user/verify-otp', {
         identifier: identifier.trim(),
         otp,
         name: identifier.split('@')[0], // Mock name
         image: "https://github.com/shadcn.png",
-        state: geo.region,
       });
       login(res.data.result);
       setDevOtpPreview('');
@@ -126,7 +109,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
             Detected Region: <span className="font-semibold">{geo.region}</span>
           </p>
           <p className="text-xs mt-1 opacity-50 italic">
-            {isSouthIndia ? "Regional Auth prefers email OTP, but email or mobile can be used if supported." : "Use your email or mobile number to receive OTP."}
+            {isSouthIndia ? "Regional Auth: Email OTP Required" : "Regional Auth: Mobile OTP Required"}
           </p>
         </div>
 
@@ -136,23 +119,17 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
           </div>
         )}
 
-        {statusMessage && (
-          <div className="mb-4 rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-3 text-center text-sm text-emerald-200">
-            {statusMessage}
-          </div>
-        )}
-
         {step === 'input' ? (
           <form onSubmit={handleRequestOtp} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1.5 opacity-80">
-                Email Address or Mobile Number
+                {isSouthIndia ? "Email Address" : "Mobile Number"}
               </label>
               <input
-                type={normalizedIdentifier.includes('@') || isSouthIndia ? "email" : "tel"}
+                type={isSouthIndia ? "email" : "tel"}
                 required
                 className="w-full px-4 py-3 rounded-xl border border-border outline-none focus:ring-2 focus:ring-red-500 bg-background text-foreground transition-all placeholder:opacity-40"
-                placeholder={isSouthIndia ? "example@email.com or +91 00000 00000" : "example@email.com or +91 00000 00000"}
+                placeholder={isSouthIndia ? "example@email.com" : "+91 00000 00000"}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
               />
@@ -192,7 +169,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
               </p>
               {devOtpPreview && (
                 <div className="mt-3 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center text-xs font-medium text-amber-200">
-                  OTP fallback code: <span className="font-mono tracking-[0.2em]">{devOtpPreview}</span>
+                  Dev OTP preview: <span className="font-mono tracking-[0.2em]">{devOtpPreview}</span>
                 </div>
               )}
             </div>
@@ -208,7 +185,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
               onClick={() => setStep('input')}
               className="w-full text-sm opacity-60 hover:opacity-100 transition"
             >
-              Change Email or Phone
+              Change {isSouthIndia ? "Email" : "Phone"}
             </button>
           </form>
         )}

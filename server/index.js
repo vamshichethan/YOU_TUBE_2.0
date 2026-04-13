@@ -17,6 +17,8 @@ dotenv.config();
 const app = express();
 import path from "path";
 
+app.set("trust proxy", true);
+
 const corsOptions = {
   origin: true,
   credentials: true,
