@@ -26,6 +26,11 @@ interface CallRoomProps {
   roomId: string;
 }
 
+interface MixedStreamHandle {
+  stream: MediaStream | null;
+  cleanup: () => void;
+}
+
 const getSupportedMimeType = () => {
   const mimeTypes = [
     "video/webm;codecs=vp9,opus",
@@ -57,6 +62,8 @@ export default function CallRoom({ roomId }: CallRoomProps) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const outgoingAudioCleanupRef = useRef<() => void>(() => undefined);
+  const recordingCleanupRef = useRef<() => void>(() => undefined);
   const makingOfferRef = useRef(false);
   const ignoreOfferRef = useRef(false);
   const isMountedRef = useRef(true);
@@ -88,20 +95,157 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     }
   };
 
-  const buildRecordingStream = () => {
-    const composite = new MediaStream();
-    const activeLocalStream = displayStreamRef.current || localStreamRef.current;
+  const updateAudioSenderTrack = async (track: MediaStreamTrack | null) => {
+    const peerConnection = peerConnectionRef.current;
+    if (!peerConnection) return;
 
-    activeLocalStream?.getVideoTracks().forEach((track) => composite.addTrack(track.clone()));
-    localStreamRef.current?.getAudioTracks().forEach((track) => composite.addTrack(track.clone()));
-    remoteStreamRef.current?.getAudioTracks().forEach((track) => composite.addTrack(track.clone()));
-    remoteStreamRef.current?.getVideoTracks().forEach((track) => {
-      if (composite.getVideoTracks().length === 0) {
-        composite.addTrack(track.clone());
-      }
+    const sender = peerConnection.getSenders().find((item) => item.track?.kind === "audio");
+    if (sender) {
+      await sender.replaceTrack(track);
+    }
+  };
+
+  const createMixedAudioStream = (streams: Array<MediaStream | null>): MixedStreamHandle => {
+    const audioStreams = streams.filter(
+      (stream): stream is MediaStream => Boolean(stream?.getAudioTracks().length)
+    );
+
+    if (!audioStreams.length || typeof window === "undefined") {
+      return {
+        stream: null,
+        cleanup: () => undefined,
+      };
+    }
+
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as Window & typeof globalThis & { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+
+    if (!AudioContextConstructor) {
+      return {
+        stream: null,
+        cleanup: () => undefined,
+      };
+    }
+
+    const audioContext = new AudioContextConstructor();
+    const destination = audioContext.createMediaStreamDestination();
+    const sources = audioStreams.map((stream) => {
+      const isolatedStream = new MediaStream(stream.getAudioTracks());
+      const source = audioContext.createMediaStreamSource(isolatedStream);
+      const gainNode = audioContext.createGain();
+      gainNode.gain.value = 1;
+      source.connect(gainNode);
+      gainNode.connect(destination);
+      return { source, gainNode };
     });
 
-    return composite;
+    return {
+      stream: destination.stream,
+      cleanup: () => {
+        sources.forEach(({ source, gainNode }) => {
+          try {
+            source.disconnect();
+            gainNode.disconnect();
+          } catch (error) {
+            console.warn("Audio graph cleanup failed", error);
+          }
+        });
+        destination.stream.getTracks().forEach((track) => track.stop());
+        audioContext.close().catch(() => undefined);
+      },
+    };
+  };
+
+  const refreshOutgoingAudioTrack = async () => {
+    outgoingAudioCleanupRef.current();
+
+    const mixedAudio = createMixedAudioStream([
+      localStreamRef.current,
+      displayStreamRef.current,
+    ]);
+
+    outgoingAudioCleanupRef.current = mixedAudio.cleanup;
+
+    const fallbackTrack = localStreamRef.current?.getAudioTracks()[0] || null;
+    const nextTrack = mixedAudio.stream?.getAudioTracks()[0] || fallbackTrack;
+    await updateAudioSenderTrack(nextTrack);
+  };
+
+  const buildRecordingStream = (): MixedStreamHandle => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return {
+        stream: new MediaStream(),
+        cleanup: () => undefined,
+      };
+    }
+
+    let animationFrameId = 0;
+
+    const drawFrame = () => {
+      context.fillStyle = "#050505";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+
+      const remoteVideo = remoteVideoRef.current;
+      const localVideo = localVideoRef.current;
+
+      if (remoteVideo && remoteVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        context.drawImage(remoteVideo, 0, 0, canvas.width, canvas.height);
+      } else {
+        context.fillStyle = "#111827";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.fillStyle = "#9ca3af";
+        context.font = "32px sans-serif";
+        context.textAlign = "center";
+        context.fillText("Waiting for your friend...", canvas.width / 2, canvas.height / 2);
+      }
+
+      if (localVideo && localVideo.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        const insetWidth = 320;
+        const insetHeight = 180;
+        const insetX = canvas.width - insetWidth - 24;
+        const insetY = 24;
+
+        context.fillStyle = "#000000";
+        context.fillRect(insetX - 4, insetY - 4, insetWidth + 8, insetHeight + 8);
+        context.drawImage(localVideo, insetX, insetY, insetWidth, insetHeight);
+
+        context.fillStyle = "rgba(0, 0, 0, 0.72)";
+        context.fillRect(insetX, insetY + insetHeight - 36, 120, 36);
+        context.fillStyle = "#ffffff";
+        context.font = "20px sans-serif";
+        context.textAlign = "left";
+        context.fillText(isScreenSharing ? "Your screen" : "You", insetX + 12, insetY + insetHeight - 12);
+      }
+
+      animationFrameId = window.requestAnimationFrame(drawFrame);
+    };
+
+    drawFrame();
+
+    const canvasStream = canvas.captureStream(30);
+    const mixedAudio = createMixedAudioStream([
+      localStreamRef.current,
+      displayStreamRef.current,
+      remoteStreamRef.current,
+    ]);
+
+    mixedAudio.stream?.getAudioTracks().forEach((track) => canvasStream.addTrack(track));
+
+    return {
+      stream: canvasStream,
+      cleanup: () => {
+        window.cancelAnimationFrame(animationFrameId);
+        canvasStream.getTracks().forEach((track) => track.stop());
+        mixedAudio.cleanup();
+      },
+    };
   };
 
   useEffect(() => {
@@ -122,6 +266,9 @@ export default function CallRoom({ roomId }: CallRoomProps) {
           setRemoteStream(incomingStream);
           attachRemotePreview(incomingStream);
           setStatusMessage("Connected. You can chat, share your screen, or record the session.");
+          refreshOutgoingAudioTrack().catch((error) =>
+            console.error("Failed to refresh outgoing audio", error)
+          );
         };
 
         peerConnection.onicecandidate = (event) => {
@@ -163,6 +310,8 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         stream.getTracks().forEach((track) => {
           peerConnection.addTrack(track, stream);
         });
+
+        await refreshOutgoingAudioTrack();
 
         socket.emit("join-room", roomId, selfIdRef.current);
         setStatusMessage("Waiting for your friend to join this call.");
@@ -224,6 +373,9 @@ export default function CallRoom({ roomId }: CallRoomProps) {
             setRemoteStream(null);
             attachRemotePreview(null);
             setStatusMessage("Your friend left the call. Share the link again to reconnect.");
+            refreshOutgoingAudioTrack().catch((error) =>
+              console.error("Failed to refresh outgoing audio", error)
+            );
           }
         });
       } catch (error) {
@@ -240,6 +392,8 @@ export default function CallRoom({ roomId }: CallRoomProps) {
       peerConnectionRef.current?.close();
       stopStreamTracks(localStreamRef.current);
       stopStreamTracks(displayStreamRef.current);
+      outgoingAudioCleanupRef.current();
+      recordingCleanupRef.current();
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       if (mediaRecorderRef.current?.state !== "inactive") {
         mediaRecorderRef.current?.stop();
@@ -270,6 +424,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
     const cameraTrack = localStreamRef.current?.getVideoTracks()[0] || null;
     await updateVideoSenderTrack(cameraTrack);
+    await refreshOutgoingAudioTrack();
     attachLocalPreview(localStreamRef.current);
     setIsScreenSharing(false);
     setStatusMessage("Returned to camera sharing.");
@@ -300,6 +455,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
       setDisplayStream(screenStream);
       attachLocalPreview(screenStream);
       await updateVideoSenderTrack(screenTrack);
+      await refreshOutgoingAudioTrack();
       setIsScreenSharing(true);
       setStatusMessage("Screen sharing is live. Choose the YouTube tab in the browser picker to co-watch together.");
     } catch (error) {
@@ -310,8 +466,11 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
   const startRecording = () => {
     try {
-      const recordingStream = buildRecordingStream();
-      if (!recordingStream.getTracks().length) {
+      const recordingSession = buildRecordingStream();
+      const recordingStream = recordingSession.stream;
+
+      if (!recordingStream || !recordingStream.getTracks().length) {
+        recordingSession.cleanup();
         setStatusMessage("Nothing is available to record yet.");
         return;
       }
@@ -322,6 +481,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         : new MediaRecorder(recordingStream);
 
       mediaRecorderRef.current = mediaRecorder;
+      recordingCleanupRef.current = recordingSession.cleanup;
       recordedChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
@@ -343,7 +503,8 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         document.body.removeChild(anchor);
         URL.revokeObjectURL(url);
 
-        recordingStream.getTracks().forEach((track) => track.stop());
+        recordingCleanupRef.current();
+        recordingCleanupRef.current = () => undefined;
         setRecordingTime(0);
         setStatusMessage("Recording saved locally to your device.");
       };
