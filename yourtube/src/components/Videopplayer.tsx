@@ -89,13 +89,27 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
 
   const closeWebsite = () => {
     executeVisualFeedback("Closing Website");
-    window.close();
-
-    setTimeout(() => {
-      if (!window.closed) {
-        router.push("/");
+    const attemptClose = () => {
+      try {
+        window.open("", "_self");
+      } catch (error) {
+        console.warn("Self-close preparation failed", error);
       }
-    }, 350);
+
+      try {
+        window.close();
+      } catch (error) {
+        console.warn("Window close failed", error);
+      }
+
+      setTimeout(() => {
+        if (!window.closed) {
+          window.location.replace("about:blank");
+        }
+      }, 250);
+    };
+
+    setTimeout(attemptClose, 150);
   };
 
   const openComments = () => {
