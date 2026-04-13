@@ -29,7 +29,7 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
   const router = useRouter();
   
   const handleStartCall = () => {
-    router.push("/call");
+    router.push("/join-call");
   };
 
   const handleSearch = (e: React.FormEvent) => {
