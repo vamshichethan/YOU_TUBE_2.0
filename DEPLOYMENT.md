@@ -15,7 +15,7 @@
 5. Add env vars from [server/.env.example](/Users/vamshi/Desktop/YOU_TUBE_2.0-main/server/.env.example).
 6. After deploy, copy the backend URL.
 7. Set `FRONTEND_URL` to your main Vercel domain. If you use multiple aliases or preview domains, add them to `ALLOWED_ORIGINS` as a comma-separated list.
-8. For OTP delivery, set `BREVO_API_KEY` for email and `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_FROM_NUMBER` for SMS.
+8. For OTP delivery, set `BREVO_API_KEY` for email and `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, and `TWILIO_PHONE_NUMBER` for SMS.
 
 ## Frontend on Vercel
 

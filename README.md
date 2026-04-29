@@ -5,7 +5,7 @@ YourTube combines video publishing, premium viewing plans, downloads, real-time 
 
 ## Live Demo
 
-- Frontend: [https://yourtube-frontend-pzny.onrender.com](https://yourtube-frontend-pzny.onrender.com)
+- Frontend: [https://yourtube-sandy.vercel.app](https://yourtube-sandy.vercel.app)
 - Backend: [https://yourtube-backend-i6tv.onrender.com](https://yourtube-backend-i6tv.onrender.com)
 
 ## Highlights
@@ -182,6 +182,7 @@ RAZORPAY_KEY_ID=your_razorpay_key
 RAZORPAY_KEY_SECRET=your_razorpay_secret
 
 FRONTEND_URL=http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:3000
 ```
 
 Run backend:
