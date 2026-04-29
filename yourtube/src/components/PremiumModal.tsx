@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "./ui/button";
 import { useUser } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
@@ -13,9 +14,11 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   const { user, login } = useUser();
   const [selectedPlan, setSelectedPlan] = useState<"Bronze" | "Silver" | "Gold">(defaultPlan || "Silver");
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const currentPlan = user?.plan || "Free";
 
   useEffect(() => {
+    setMounted(true);
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/checkout.js";
     script.async = true;
@@ -25,7 +28,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
     };
   }, []);
 
-  if (!isOpen) return null;
+  if (!mounted || !isOpen) return null;
 
   const handleUpgrade = async () => {
     if (!user?._id) {
@@ -129,9 +132,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
      { name: "Gold", price: 100, limit: "Unlimited watch time and downloads", color: "bg-yellow-500" }
   ];
 
-  return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 px-4 py-6 backdrop-blur-sm">
-      <div className="relative mx-auto mb-10 max-h-[calc(100vh-3rem)] w-[min(calc(100vw-2rem),42rem)] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 md:p-8">
+  return createPortal(
+    <div className="fixed inset-0 z-[1000] overflow-y-auto bg-black/60 px-4 py-6 backdrop-blur-sm">
+      <div className="relative mx-auto mb-10 max-h-[calc(100dvh-3rem)] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 md:p-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-black transition text-xl font-bold"
@@ -177,7 +180,8 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
           </p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
