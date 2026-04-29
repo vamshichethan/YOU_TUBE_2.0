@@ -21,6 +21,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [devOtpPreview, setDevOtpPreview] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState('');
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -33,6 +34,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
       setOtp('');
       setError('');
       setDevOtpPreview('');
+      setDeliveryMode('');
     }
   }, [isOpen]);
 
@@ -62,8 +64,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
     try {
       const response = await axiosInstance.post('/user/request-otp', {
         identifier: normalizedIdentifier,
+        state: geo.region,
       });
       setDevOtpPreview(response.data?.devOtp || '');
+      setDeliveryMode(response.data?.deliveryMode || '');
       setStep('otp');
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to send OTP');
@@ -169,7 +173,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose, geo }) => {
               </p>
               {devOtpPreview && (
                 <div className="mt-3 rounded-lg border border-dashed border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center text-xs font-medium text-amber-200">
-                  Dev OTP preview: <span className="font-mono tracking-[0.2em]">{devOtpPreview}</span>
+                  {deliveryMode === "mock"
+                    ? "Local email/SMS is in mock mode. Use this OTP:"
+                    : "Dev OTP preview:"}{" "}
+                  <span className="font-mono tracking-[0.2em]">{devOtpPreview}</span>
                 </div>
               )}
             </div>

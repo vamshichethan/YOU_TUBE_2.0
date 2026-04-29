@@ -10,7 +10,7 @@ interface PremiumModalProps {
 }
 
 const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPlan }) => {
-  const { user } = useUser();
+  const { user, login } = useUser();
   const [selectedPlan, setSelectedPlan] = useState<"Bronze" | "Silver" | "Gold">(defaultPlan || "Silver");
   const [isProcessing, setIsProcessing] = useState(false);
   const currentPlan = user?.plan || "Free";
@@ -65,9 +65,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
 
         if (verifyRes.data.plan === selectedPlan) {
           const invoiceId = verifyRes.data.invoice?.invoiceId;
+          login({ ...user, plan: selectedPlan });
           alert(`Test payment successful! You are now on the ${selectedPlan} Plan. Invoice ${invoiceId || ""} has been emailed to ${user?.email}.`);
           onClose();
-          window.location.reload();
         }
         setIsProcessing(false);
         return;
@@ -91,9 +91,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
             });
             if (verifyRes.data.plan === selectedPlan) {
               const invoiceId = verifyRes.data.invoice?.invoiceId;
+              login({ ...user, plan: selectedPlan });
               alert(`Payment successful! You are now on the ${selectedPlan} Plan. Invoice ${invoiceId || ""} has been emailed to ${user?.email}.`);
               onClose();
-              window.location.reload();
             }
           } catch (err) {
             alert("Payment verification failed.");
@@ -124,9 +124,9 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   };
 
   const plans = [
-     { name: "Bronze", price: 10, limit: "Watch up to 7 minutes per video", color: "bg-amber-600" },
-     { name: "Silver", price: 50, limit: "Watch up to 10 minutes per video", color: "bg-slate-500" },
-     { name: "Gold", price: 100, limit: "Unlimited video watching time", color: "bg-yellow-500" }
+     { name: "Bronze", price: 10, limit: "7 min watch time + unlimited downloads", color: "bg-amber-600" },
+     { name: "Silver", price: 50, limit: "10 min watch time + unlimited downloads", color: "bg-slate-500" },
+     { name: "Gold", price: 100, limit: "Unlimited watch time and downloads", color: "bg-yellow-500" }
   ];
 
   return (
@@ -141,7 +141,7 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
         <div className="text-center space-y-4">
           <h2 className="text-3xl font-bold tracking-tight">Upgrade Your Plan</h2>
           <p className="text-gray-600 mb-6">
-            Free users can watch up to 5 minutes per video. Upgrade through Razorpay test mode to unlock longer viewing limits and premium access.
+            Free users get 1 video download per day. Upgrade through Razorpay test mode to unlock unlimited downloads and longer viewing limits.
           </p>
           <div className="rounded-xl bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700">
             Current plan: <span className="font-bold text-black">{currentPlan}</span>

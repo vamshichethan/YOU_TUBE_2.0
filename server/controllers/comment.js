@@ -2,7 +2,7 @@ import comment from "../Modals/comment.js";
 import mongoose from "mongoose";
 import { resolveRequestGeo } from "../lib/geo.js";
 
-const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}.,!?'"()-]+$/u;
+const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}]+$/u;
 
 const isValidCommentBody = (value = "") => {
   const trimmedValue = value.trim();
@@ -15,7 +15,7 @@ export const postcomment = async (req, res) => {
   if (!isValidCommentBody(commentbody)) {
     return res.status(400).json({
       message:
-        "Comments may include letters from any language, numbers, spaces, and basic punctuation only.",
+        "Comments may include letters from any language, numbers, and spaces only. Special characters are blocked.",
     });
   }
 
@@ -163,22 +163,10 @@ export const getallcomment = async (req, res) => {
   const { videoid } = req.params;
   try {
     const commentvideo = await comment.find({ videoid: videoid }).sort({ commentedon: -1 });
-    if (commentvideo.length === 0 && videoid.startsWith('mock_')) throw new Error("Mock video fallback");
     return res.status(200).json(commentvideo);
   } catch (error) {
-    // Return mock comments for demonstration
-    const mockComments = [
-      {
-        _id: "comment_mock_1",
-        commentbody: "This ప్రకృతి video is absolutely amazing!",
-        usercommented: "NatureLover",
-        city: "Bangalore",
-        likes: ["user1", "user2"],
-        dislikes: [],
-        commentedon: new Date().toISOString()
-      }
-    ];
-    return res.status(200).json(mockComments);
+    console.error("Error fetching comments:", error);
+    return res.status(500).json({ message: "Failed to fetch comments" });
   }
 };
 export const deletecomment = async (req, res) => {
@@ -205,7 +193,7 @@ export const editcomment = async (req, res) => {
   if (!isValidCommentBody(commentbody)) {
     return res.status(400).json({
       message:
-        "Comments may include letters from any language, numbers, spaces, and basic punctuation only.",
+        "Comments may include letters from any language, numbers, and spaces only. Special characters are blocked.",
     });
   }
 

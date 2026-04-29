@@ -6,6 +6,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useUser } from "@/lib/AuthContext";
 import axiosInstance from "@/lib/axiosinstance";
 import { ThumbsUp, ThumbsDown, Languages, MapPin } from "lucide-react";
+import { useGeoTimeTheme } from "@/lib/useGeoTimeTheme";
 
 interface Comment {
   _id: string;
@@ -29,7 +30,7 @@ const translationLanguages = [
   { label: "French", value: "fr" },
 ];
 
-const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}.,!?'"()-]+$/u;
+const allowedCommentPattern = /^[\p{L}\p{M}\p{N}\p{Zs}]+$/u;
 
 const Comments = ({ videoId }: any) => {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -40,6 +41,7 @@ const Comments = ({ videoId }: any) => {
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({});
   const [translatingCommentId, setTranslatingCommentId] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("en");
+  const geo = useGeoTimeTheme();
 
   useEffect(() => {
     loadComments();
@@ -60,7 +62,7 @@ const Comments = ({ videoId }: any) => {
     if (!user || !newComment.trim()) return;
 
     if (!allowedCommentPattern.test(newComment.trim())) {
-      alert("Comments can use any language, but only letters, numbers, spaces, and basic punctuation are allowed.");
+      alert("Comments can use any language, but only letters, numbers, and spaces are allowed. Special characters are blocked.");
       return;
     }
 
@@ -71,6 +73,7 @@ const Comments = ({ videoId }: any) => {
         userid: user._id,
         commentbody: newComment,
         usercommented: user.name,
+        city: geo.city,
       });
       if (res.data.comment) {
         await loadComments();
@@ -167,8 +170,14 @@ const Comments = ({ videoId }: any) => {
               placeholder="Add a friendly comment in any language..."
               value={newComment}
               onChange={(e: any) => setNewComment(e.target.value)}
+              aria-invalid={Boolean(newComment.trim()) && !allowedCommentPattern.test(newComment.trim())}
               className="min-h-[100px] resize-none border-0 border-b-2 border-border/50 bg-transparent rounded-none focus-visible:ring-0 focus:border-red-500 transition-all font-sans text-lg placeholder:opacity-50"
             />
+            {newComment.trim() && !allowedCommentPattern.test(newComment.trim()) && (
+              <p className="text-xs font-semibold text-red-500">
+                Special characters are blocked. Use letters, numbers, and spaces only.
+              </p>
+            )}
             <div className="flex gap-2 justify-end">
               <Button
                 variant="ghost"
@@ -179,7 +188,7 @@ const Comments = ({ videoId }: any) => {
               </Button>
               <Button
                 onClick={handleSubmitComment}
-                disabled={!newComment.trim() || isSubmitting}
+                disabled={!newComment.trim() || isSubmitting || !allowedCommentPattern.test(newComment.trim())}
                 className="bg-red-600 hover:bg-red-700 text-white rounded-full px-8 font-bold shadow-lg shadow-red-500/20"
               >
                 Comment
@@ -219,6 +228,7 @@ const Comments = ({ videoId }: any) => {
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => handleLike(comment._id)}
+                    aria-label={`Like comment by ${comment.usercommented}`}
                     className={`p-2 rounded-full hover:bg-muted transition-all duration-200 ${comment.likes?.includes(user?._id) ? 'text-red-500 bg-red-500/10' : 'text-muted-foreground'}`}
                   >
                     <ThumbsUp className="w-4 h-4" />
@@ -229,6 +239,7 @@ const Comments = ({ videoId }: any) => {
                 <div className="flex items-center gap-1.5">
                   <button 
                     onClick={() => handleDislike(comment._id)}
+                    aria-label={`Dislike comment by ${comment.usercommented}`}
                     className={`p-2 rounded-full hover:bg-muted transition-all duration-200 ${comment.dislikes?.includes(user?._id) ? 'text-foreground bg-foreground/10' : 'text-muted-foreground'}`}
                   >
                     <ThumbsDown className="w-4 h-4" />
@@ -239,6 +250,7 @@ const Comments = ({ videoId }: any) => {
                 <button 
                   onClick={() => handleTranslate(comment)}
                   disabled={translatingCommentId === comment._id}
+                  aria-label={`${translatedComments[comment._id] ? "Show original" : "Translate"} comment by ${comment.usercommented}`}
                   className="flex items-center gap-1.5 text-xs font-bold text-red-500 hover:text-red-600 transition-colors ml-2 py-1.5 px-3 hover:bg-red-500/5 rounded-full"
                 >
                   <Languages className="w-3.5 h-3.5" />

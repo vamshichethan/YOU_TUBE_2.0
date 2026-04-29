@@ -5,18 +5,21 @@ import "@/styles/globals.css";
 import type { AppProps } from "next/app";
 import { UserProvider } from "../lib/AuthContext";
 import { useGeoTimeTheme } from "../lib/useGeoTimeTheme";
+import { useRouter } from "next/router";
 
 export default function App({ Component, pageProps }: AppProps) {
   const geo = useGeoTimeTheme();
+  const router = useRouter();
+  const isCallPage = router.pathname.startsWith("/call/");
   
   return (
     <UserProvider>
       <div className={`min-h-screen transition-colors duration-500 ${geo.theme === 'light' ? 'bg-white text-black' : 'bg-zinc-950 text-white'}`}>
         <title>Your-Tube Clone</title>
-        <Header geo={geo} />
+        {!isCallPage && <Header geo={geo} />}
         <Toaster />
-        <div className="flex">
-          <Sidebar />
+        <div className={isCallPage ? "block" : "flex"}>
+          {!isCallPage && <Sidebar />}
           <Component {...pageProps} />
         </div>
       </div>

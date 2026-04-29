@@ -1,11 +1,15 @@
 import video from "../Modals/video.js";
 import history from "../Modals/history.js";
 
+const isDemoVideoId = (videoId = "") => {
+  return videoId.startsWith("mock_") || videoId.startsWith("68000000000000000000000");
+};
+
 export const handlehistory = async (req, res) => {
   const { userId } = req.body;
   const { videoId } = req.params;
   
-  if (videoId.startsWith('mock_')) {
+  if (isDemoVideoId(videoId)) {
     return res.status(200).json({ history: true, message: "Mock history viewed" });
   }
 
@@ -15,19 +19,25 @@ export const handlehistory = async (req, res) => {
     return res.status(200).json({ history: true });
   } catch (error) {
     console.error(" error:", error);
-    return res.status(500).json({ message: "Something went wrong" });
+    return res.status(200).json({
+      history: false,
+      message: "History tracking skipped while the database is unavailable",
+    });
   }
 };
 export const handleview = async (req, res) => {
   const { videoId } = req.params;
-  if (videoId.startsWith('mock_')) {
+  if (isDemoVideoId(videoId)) {
     return res.status(200).json({ message: "Mock view updated" });
   }
   try {
     await video.findByIdAndUpdate(videoId, { $inc: { views: 1 } });
+    return res.status(200).json({ message: "View updated" });
   } catch (error) {
     console.error(" error:", error);
-    return res.status(500).json({ message: "Something went wrong" });
+    return res.status(200).json({
+      message: "View tracking skipped while the database is unavailable",
+    });
   }
 };
 export const getallhistoryVideo = async (req, res) => {

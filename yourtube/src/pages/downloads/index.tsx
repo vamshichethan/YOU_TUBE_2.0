@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axiosinstance";
 import { useUser } from "@/lib/AuthContext";
+import { Crown, Download } from "lucide-react";
 
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
@@ -53,7 +54,23 @@ const DownloadsPage = () => {
 
   return (
     <div className="flex-1 p-8 font-sans bg-transparent min-h-screen transition-colors duration-500">
-      <h1 className="text-4xl font-black mb-10 tracking-tighter">Your Library</h1>
+      <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-4xl font-black tracking-tighter">Downloads</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Videos you download from the watch page are saved here in your profile.
+          </p>
+        </div>
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 px-4 py-3 text-sm">
+          {user?.plan === "Free" ? <Download className="h-5 w-5 text-red-500" /> : <Crown className="h-5 w-5 text-yellow-500" />}
+          <div>
+            <p className="font-bold">{user?.plan || "Free"} plan</p>
+            <p className="text-xs text-muted-foreground">
+              {user?.plan === "Free" ? "1 download per day" : "Unlimited downloads active"}
+            </p>
+          </div>
+        </div>
+      </div>
       
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-pulse">

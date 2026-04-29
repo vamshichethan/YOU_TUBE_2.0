@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useUser } from "@/lib/AuthContext";
 import PremiumModal from "./PremiumModal";
 import { useRouter } from "next/router";
@@ -14,6 +14,8 @@ interface VideoPlayerProps {
   allVideos?: any[];
 }
 
+const GESTURE_SEQUENCE_DELAY_MS = 420;
+
 export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { user } = useUser();
@@ -25,6 +27,15 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
   const clickTimerRef = useRef<NodeJS.Timeout | null>(null);
   const clickCountRef = useRef(0);
   const lastZoneRef = useRef<'left' | 'center' | 'right' | null>(null);
+  const lastTouchAtRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (clickTimerRef.current) {
+        clearTimeout(clickTimerRef.current);
+      }
+    };
+  }, []);
 
   // Time limits in seconds based on plan
   const getLimitInSeconds = (plan: string) => {
@@ -89,27 +100,7 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
 
   const closeWebsite = () => {
     executeVisualFeedback("Closing Website");
-    const attemptClose = () => {
-      try {
-        window.open("", "_self");
-      } catch (error) {
-        console.warn("Self-close preparation failed", error);
-      }
-
-      try {
-        window.close();
-      } catch (error) {
-        console.warn("Window close failed", error);
-      }
-
-      setTimeout(() => {
-        if (!window.closed) {
-          window.location.replace("about:blank");
-        }
-      }, 250);
-    };
-
-    setTimeout(attemptClose, 150);
+    setTimeout(() => router.push("/"), 250);
   };
 
   const openComments = () => {
@@ -180,33 +171,44 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
           closeWebsite();
         }
       }
-    }, 260);
+    }, GESTURE_SEQUENCE_DELAY_MS);
   };
 
   const handleZoneClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (Date.now() - lastTouchAtRef.current < 450) return;
     handleGestureTap(e.clientX, e.currentTarget);
   };
 
   const handleTouchEnd = (e: React.TouchEvent<HTMLDivElement>) => {
     const touch = e.changedTouches[0];
     if (!touch) return;
+    lastTouchAtRef.current = Date.now();
     handleGestureTap(touch.clientX, e.currentTarget);
   };
 
   return (
     <>
-      <div className="aspect-video bg-black rounded-lg overflow-hidden relative group">
+      <div
+        className="aspect-video bg-black rounded-lg overflow-hidden relative group"
+        data-testid="gesture-video-player"
+      >
         
-        {/* Invisible gesture overlay sitting above video, letting bottom 15% clear for natural seek bar clicks */}
         <div 
-           className="absolute top-0 left-0 right-0 bottom-[15%] z-10 cursor-pointer"
+           className="absolute top-0 left-0 right-0 bottom-[15%] z-10 cursor-pointer touch-manipulation select-none"
+           aria-label="Gesture video controls"
+           data-testid="gesture-control-overlay"
            onClick={handleZoneClick}
            onTouchEnd={handleTouchEnd}
-           onDoubleClick={(e) => e.preventDefault()} // prevent natural zoom on double tap
+           onDoubleClick={(e) => e.preventDefault()}
         />
 
         {visualFeedback && (
-            <div className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-white px-4 py-2 rounded-full font-bold text-lg animate-pulse whitespace-nowrap pointer-events-none">
+            <div
+              className="absolute top-10 left-1/2 -translate-x-1/2 z-20 bg-black/70 text-white px-4 py-2 rounded-full font-bold text-lg animate-pulse whitespace-nowrap pointer-events-none"
+              role="status"
+              aria-live="polite"
+              data-testid="gesture-feedback"
+            >
                {visualFeedback}
             </div>
         )}
@@ -237,8 +239,9 @@ export default function VideoPlayer({ video, allVideos }: VideoPlayerProps) {
         isOpen={showPaywall} 
         onClose={() => {
             setShowPaywall(false);
-            if (videoRef.current) {
-                videoRef.current.currentTime = getLimitInSeconds(user?.plan || 'Free') - 1;
+            const limit = getLimitInSeconds(user?.plan || 'Free');
+            if (videoRef.current && Number.isFinite(limit)) {
+                videoRef.current.currentTime = Math.max(0, limit - 1);
             }
         }} 
       />

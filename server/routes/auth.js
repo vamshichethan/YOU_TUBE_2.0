@@ -1,7 +1,8 @@
 import express from "express";
-import { getLocationContext, login, updateprofile, requestOTP, verifyOTP } from "../controllers/auth.js";
+import { getIceServerConfig, getLocationContext, login, updateprofile, requestOTP, verifyOTP } from "../controllers/auth.js";
 const routes = express.Router();
 
+routes.get("/ice-servers", getIceServerConfig);
 routes.get("/location-context", getLocationContext);
 routes.post("/login", login);
 routes.post("/request-otp", requestOTP);

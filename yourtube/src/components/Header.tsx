@@ -1,4 +1,4 @@
-import { Bell, Menu, Mic, Search, User, VideoIcon, Phone } from "lucide-react";
+import { Bell, Crown, Menu, Mic, Search, User, VideoIcon, Phone } from "lucide-react";
 import React, { useState } from "react";
 import { Button } from "./ui/button";
 import Link from "next/link";
@@ -16,6 +16,7 @@ import { useRouter } from "next/router";
 import { useUser } from "@/lib/AuthContext";
 import LoginModal from "./LoginModal";
 import { GeoInfo } from "@/lib/useGeoTimeTheme";
+import PremiumModal from "./PremiumModal";
 
 interface HeaderProps {
   geo?: GeoInfo;
@@ -26,6 +27,7 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [isdialogeopen, setisdialogeopen] = useState(false);
+  const [isPremiumModalOpen, setIsPremiumModalOpen] = useState(false);
   const router = useRouter();
   
   const handleStartCall = () => {
@@ -90,6 +92,14 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
             <Button variant="ghost" size="icon" onClick={handleStartCall} title="Start a Video Call">
               <Phone className="w-6 h-6" />
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsPremiumModalOpen(true)}
+              title={`Upgrade plan${user.plan ? ` - current ${user.plan}` : ""}`}
+            >
+              <Crown className="w-6 h-6" />
+            </Button>
             <Button variant="ghost" size="icon">
               <VideoIcon className="w-6 h-6" />
             </Button>
@@ -134,6 +144,12 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
                 <DropdownMenuItem asChild>
                   <Link href="/watch-later">Watch later</Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/downloads">Downloads</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setIsPremiumModalOpen(true)}>
+                  Premium plans
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout}>Sign out</DropdownMenuItem>
               </DropdownMenuContent>
@@ -141,6 +157,17 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
           </>
         ) : (
           <>
+            <Button variant="ghost" size="icon" onClick={handleStartCall} title="Start a Video Call">
+              <Phone className="w-6 h-6" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsPremiumModalOpen(true)}
+              title="Upgrade plan"
+            >
+              <Crown className="w-6 h-6" />
+            </Button>
             <Button
               className="flex items-center gap-2 bg-foreground text-background hover:opacity-90 font-bold px-6 py-2 rounded-full shadow-sm transition-all"
               onClick={() => setIsLoginModalOpen(true)}
@@ -163,6 +190,10 @@ const Header: React.FC<HeaderProps> = ({ geo }) => {
             geo={geo} 
         />
       )}
+      <PremiumModal
+        isOpen={isPremiumModalOpen}
+        onClose={() => setIsPremiumModalOpen(false)}
+      />
     </header>
   );
 };

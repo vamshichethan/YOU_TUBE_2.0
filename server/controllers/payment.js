@@ -1,32 +1,14 @@
 import Razorpay from "razorpay";
 import crypto from "crypto";
 import User from "../Modals/Auth.js";
-import nodemailer from "nodemailer";
-
-const SMTP_TIMEOUT_MS = 10000;
+import { mailDeliveryMode, sendMailMessage } from "../lib/messaging.js";
+const razorpaySecret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_SECRET || "mockSecretKey456";
 
 const razorpayInstance = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_mockKeyId123",
-  key_secret: process.env.RAZORPAY_SECRET || "mockSecretKey456"
+  key_secret: razorpaySecret
 });
 const usingMockRazorpay = (process.env.RAZORPAY_KEY_ID || "rzp_test_mockKeyId123").includes("mock");
-
-const transporter = process.env.SMTP_HOST
-  ? nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
-      connectionTimeout: SMTP_TIMEOUT_MS,
-      greetingTimeout: SMTP_TIMEOUT_MS,
-      socketTimeout: SMTP_TIMEOUT_MS,
-      auth: process.env.SMTP_USER
-        ? {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS,
-          }
-        : undefined,
-    })
-  : nodemailer.createTransport({ jsonTransport: true });
 
 const PLAN_PRICES = {
   Bronze: 1000,   // ₹10.00
@@ -93,7 +75,7 @@ export const verifyPayment = async (req, res) => {
     
     // Validate signature
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const expectedSign = crypto.createHmac("sha256", process.env.RAZORPAY_SECRET || "mockSecretKey456")
+    const expectedSign = crypto.createHmac("sha256", razorpaySecret)
       .update(sign.toString())
       .digest("hex");
 
@@ -102,9 +84,6 @@ export const verifyPayment = async (req, res) => {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
-      user.plan = plan;
-      await user.save();
 
       const invoiceDate = new Date();
       const invoiceId = `INV-${invoiceDate.getTime()}`;
@@ -143,16 +122,31 @@ export const verifyPayment = async (req, res) => {
         `,
       };
 
+      let emailDelivered = false;
+      let emailMode = mailDeliveryMode;
+
       try {
-        await transporter.sendMail(mailOptions);
+        const mailResult = await sendMailMessage(mailOptions);
+        emailDelivered = true;
+
+        if (mailDeliveryMode === "mock") {
+          console.log("[INVOICE EMAIL MOCK TRANSPORT]", JSON.stringify(mailResult));
+        }
       } catch (error) {
-        console.log("Invoice email fallback:", mailOptions);
+        console.log("Invoice email send failed:", error.message);
       }
+
+      user.plan = plan;
+      await user.save();
 
       res.status(200).json({
         message: "Payment verified successfully",
         plan,
-        invoice: invoiceDetails,
+        invoice: {
+          ...invoiceDetails,
+          emailDelivered,
+          emailMode,
+        },
       });
     } else {
       res.status(400).json({ message: "Invalid signature" });

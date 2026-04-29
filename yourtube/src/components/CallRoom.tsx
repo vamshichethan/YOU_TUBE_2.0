@@ -5,22 +5,25 @@ import { io, Socket } from "socket.io-client";
 import {
   Camera,
   CameraOff,
+  CheckCircle2,
   CircleDot,
   Copy,
+  ExternalLink,
   Mic,
   MicOff,
   MonitorUp,
   PhoneOff,
   StopCircle,
   VideoOff,
+  Youtube,
 } from "lucide-react";
 
-const ICE_SERVERS = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:stun1.l.google.com:19302" },
-  ],
-};
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: "stun:stun.l.google.com:19302" },
+  { urls: "stun:stun1.l.google.com:19302" },
+];
+
+const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
 
 interface CallRoomProps {
   roomId: string;
@@ -30,6 +33,8 @@ interface MixedStreamHandle {
   stream: MediaStream | null;
   cleanup: () => void;
 }
+
+type CallConnectionState = "idle" | "joining" | "ready" | "connected" | "reconnecting" | "failed";
 
 const getSupportedMimeType = () => {
   const mimeTypes = [
@@ -49,6 +54,10 @@ export default function CallRoom({ roomId }: CallRoomProps) {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isFriendScreenSharing, setIsFriendScreenSharing] = useState(false);
+  const [isFriendRecording, setIsFriendRecording] = useState(false);
+  const [participantCount, setParticipantCount] = useState(1);
+  const [connectionState, setConnectionState] = useState<CallConnectionState>("idle");
   const [recordingTime, setRecordingTime] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Start by sharing the room link with a friend.");
 
@@ -68,6 +77,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
   const isInitiatorRef = useRef(false);
   const isMountedRef = useRef(true);
   const selfIdRef = useRef(`user_${Math.random().toString(36).slice(2, 9)}`);
+  const iceConfigRef = useRef<RTCConfiguration>({ iceServers: DEFAULT_ICE_SERVERS });
 
   const attachLocalPreview = (stream: MediaStream | null) => {
     if (localVideoRef.current) {
@@ -79,6 +89,14 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = stream;
     }
+  };
+
+  const emitRoomPresence = (socket: Socket) => {
+    socket.emit("call-presence", {
+      senderId: selfIdRef.current,
+      isScreenSharing: isScreenSharing,
+      isRecording: isRecording,
+    });
   };
 
   const stopStreamTracks = (stream: MediaStream | null) => {
@@ -272,11 +290,57 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
     const initializeCall = async () => {
       try {
+        try {
+          const iceResponse = await fetch(`${backendUrl}/user/ice-servers`);
+          if (iceResponse.ok) {
+            const iceConfig = await iceResponse.json();
+            if (Array.isArray(iceConfig?.iceServers) && iceConfig.iceServers.length) {
+              iceConfigRef.current = { iceServers: iceConfig.iceServers };
+              setStatusMessage(
+                iceConfig.relayConfigured
+                  ? "Connecting with relay-ready call networking for better reliability."
+                  : "Connecting with standard call networking."
+              );
+            }
+          }
+        } catch (error) {
+          console.warn("Falling back to default ICE servers", error);
+        }
+
         const socket = io(process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000");
         socketRef.current = socket;
 
-        const peerConnection = new RTCPeerConnection(ICE_SERVERS);
+        socket.on("connect", () => {
+          setConnectionState("joining");
+          setStatusMessage("Connected to call signaling. Preparing camera and microphone...");
+        });
+
+        socket.on("connect_error", () => {
+          setConnectionState("failed");
+          setStatusMessage("Call signaling is unavailable. Please check the backend and retry.");
+        });
+
+        socket.on("disconnect", () => {
+          setConnectionState("reconnecting");
+          setStatusMessage("Call signaling disconnected. Reconnecting if the room is still open...");
+        });
+
+        const peerConnection = new RTCPeerConnection(iceConfigRef.current);
         peerConnectionRef.current = peerConnection;
+
+        peerConnection.onconnectionstatechange = () => {
+          const state = peerConnection.connectionState;
+          if (state === "connected") {
+            setConnectionState("connected");
+            setStatusMessage("Connected. You can chat, share your screen, or record the session.");
+          } else if (state === "failed" || state === "disconnected") {
+            setConnectionState("failed");
+            setStatusMessage("The peer connection dropped. Rejoin the room or share the invite link again.");
+          } else if (state === "connecting") {
+            setConnectionState("joining");
+            setStatusMessage("Connecting both participants...");
+          }
+        };
 
         peerConnection.ontrack = (event) => {
           const [incomingStream] = event.streams;
@@ -308,6 +372,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         localStreamRef.current = stream;
         setLocalStream(stream);
         attachLocalPreview(stream);
+        setConnectionState("ready");
 
         stream.getTracks().forEach((track) => {
           peerConnection.addTrack(track, stream);
@@ -320,6 +385,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
         socket.on("room-joined", ({ participantCount }) => {
           const isFirstParticipant = participantCount <= 1;
+          setParticipantCount(participantCount);
           isInitiatorRef.current = isFirstParticipant;
           setStatusMessage(
             isFirstParticipant
@@ -331,9 +397,17 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         socket.on("user-connected", async ({ userId }) => {
           if (userId !== selfIdRef.current) {
             isInitiatorRef.current = true;
+            setParticipantCount((previous) => Math.max(previous, 2));
             setStatusMessage("Another user joined. Setting up your video call.");
+            emitRoomPresence(socket);
             await createAndSendOffer(socket, peerConnection);
           }
+        });
+
+        socket.on("room-presence", (payload) => {
+          if (payload.senderId === selfIdRef.current) return;
+          setIsFriendScreenSharing(Boolean(payload.isScreenSharing));
+          setIsFriendRecording(Boolean(payload.isRecording));
         });
 
         socket.on("offer", async (payload) => {
@@ -379,10 +453,34 @@ export default function CallRoom({ roomId }: CallRoomProps) {
           }
         });
 
-        socket.on("user-disconnected", (userId) => {
-          if (userId !== selfIdRef.current) {
+        socket.on("screen-share-state", (payload) => {
+          if (payload.senderId === selfIdRef.current) return;
+          setIsFriendScreenSharing(Boolean(payload.isScreenSharing));
+          setStatusMessage(
+            payload.isScreenSharing
+              ? "Your friend is sharing their screen. You can discuss the YouTube tab together."
+              : "Your friend stopped screen sharing."
+          );
+        });
+
+        socket.on("recording-state", (payload) => {
+          if (payload.senderId === selfIdRef.current) return;
+          setIsFriendRecording(Boolean(payload.isRecording));
+          setStatusMessage(
+            payload.isRecording
+              ? "Your friend started recording their local copy of this session."
+              : "Your friend stopped recording."
+          );
+        });
+
+        socket.on("user-disconnected", (payload) => {
+          const disconnectedUserId = typeof payload === "string" ? payload : payload?.userId;
+          if (disconnectedUserId !== selfIdRef.current) {
             remoteStreamRef.current = null;
             setRemoteStream(null);
+            setParticipantCount((previous) => Math.max(1, previous - 1));
+            setIsFriendScreenSharing(false);
+            setIsFriendRecording(false);
             attachRemotePreview(null);
             setStatusMessage("Your friend left the call. Share the link again to reconnect.");
             refreshOutgoingAudioTrack().catch((error) =>
@@ -392,6 +490,7 @@ export default function CallRoom({ roomId }: CallRoomProps) {
         });
       } catch (error) {
         console.error("Failed to initialize call", error);
+        setConnectionState("failed");
         setStatusMessage("Camera or microphone access was blocked. Please allow media permissions and retry.");
       }
     };
@@ -439,6 +538,10 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     await refreshOutgoingAudioTrack();
     attachLocalPreview(localStreamRef.current);
     setIsScreenSharing(false);
+    socketRef.current?.emit("screen-share-state", {
+      senderId: selfIdRef.current,
+      isScreenSharing: false,
+    });
     setStatusMessage("Returned to camera sharing.");
   };
 
@@ -449,6 +552,11 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     }
 
     try {
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        setStatusMessage("This browser does not support screen sharing. Try Chrome, Edge, or another modern desktop browser.");
+        return;
+      }
+
       const screenStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "browser",
@@ -469,6 +577,10 @@ export default function CallRoom({ roomId }: CallRoomProps) {
       await updateVideoSenderTrack(screenTrack);
       await refreshOutgoingAudioTrack();
       setIsScreenSharing(true);
+      socketRef.current?.emit("screen-share-state", {
+        senderId: selfIdRef.current,
+        isScreenSharing: true,
+      });
       setStatusMessage("Screen sharing is live. Choose the YouTube tab in the browser picker to co-watch together.");
     } catch (error) {
       console.error("Screen sharing failed", error);
@@ -478,6 +590,11 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
   const startRecording = () => {
     try {
+      if (typeof MediaRecorder === "undefined") {
+        setStatusMessage("This browser does not support local call recording.");
+        return;
+      }
+
       const recordingSession = buildRecordingStream();
       const recordingStream = recordingSession.stream;
 
@@ -523,6 +640,10 @@ export default function CallRoom({ roomId }: CallRoomProps) {
 
       mediaRecorder.start(1000);
       setIsRecording(true);
+      socketRef.current?.emit("recording-state", {
+        senderId: selfIdRef.current,
+        isRecording: true,
+      });
       setStatusMessage("Recording started. The session will download locally when you stop.");
       recordingTimerRef.current = setInterval(() => {
         setRecordingTime((previous) => previous + 1);
@@ -537,6 +658,10 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      socketRef.current?.emit("recording-state", {
+        senderId: selfIdRef.current,
+        isRecording: false,
+      });
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
     }
   };
@@ -559,6 +684,20 @@ export default function CallRoom({ roomId }: CallRoomProps) {
     }
   };
 
+  const openYouTubeTab = () => {
+    window.open("https://www.youtube.com", "_blank", "noopener,noreferrer");
+    setStatusMessage("YouTube opened in a new tab. Return here, choose screen share, then select that YouTube tab.");
+  };
+
+  const connectionLabel = {
+    idle: "Idle",
+    joining: "Connecting",
+    ready: "Ready",
+    connected: "Live",
+    reconnecting: "Reconnecting",
+    failed: "Needs attention",
+  }[connectionState];
+
   const endCall = () => {
     stopRecording();
     stopScreenSharing().catch(() => undefined);
@@ -574,6 +713,13 @@ export default function CallRoom({ roomId }: CallRoomProps) {
       )}
 
       <div className="absolute right-4 top-4 z-50 flex items-center gap-3 rounded-2xl border border-white/10 bg-black/40 px-4 py-3 backdrop-blur-md">
+        <div className="hidden border-r border-white/10 pr-3 sm:block">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/50">Status</p>
+          <p className="flex items-center gap-1 text-sm font-semibold">
+            <CheckCircle2 size={14} className={connectionState === "failed" ? "text-red-400" : "text-emerald-400"} />
+            {connectionLabel}
+          </p>
+        </div>
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-white/50">Room</p>
           <p className="text-sm font-semibold">{roomId}</p>
@@ -612,9 +758,37 @@ export default function CallRoom({ roomId }: CallRoomProps) {
             <div className="rounded-3xl border border-white/10 bg-white/5 p-5 shadow-xl">
               <h2 className="text-lg font-semibold">Live Collaboration</h2>
               <p className="mt-2 text-sm leading-relaxed text-white/70">{statusMessage}</p>
+              <div className="mt-4 grid grid-cols-2 gap-2 text-xs font-semibold">
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-white/70">
+                  Participants {participantCount}/2
+                </div>
+                <div className={`rounded-2xl border px-3 py-2 ${
+                  connectionState === "failed" ? "border-red-400/50 bg-red-400/15 text-red-100" : "border-emerald-400/40 bg-emerald-400/10 text-emerald-100"
+                }`}>
+                  {connectionLabel}
+                </div>
+                <div className={`rounded-2xl border px-3 py-2 ${
+                  isFriendScreenSharing ? "border-blue-400/50 bg-blue-400/15 text-blue-100" : "border-white/10 bg-white/5 text-white/55"
+                }`}>
+                  Friend screen {isFriendScreenSharing ? "sharing" : "idle"}
+                </div>
+                <div className={`rounded-2xl border px-3 py-2 ${
+                  isFriendRecording ? "border-red-400/50 bg-red-400/15 text-red-100" : "border-white/10 bg-white/5 text-white/55"
+                }`}>
+                  Friend recording {isFriendRecording ? "on" : "off"}
+                </div>
+              </div>
               <div className="mt-4 rounded-2xl border border-blue-400/20 bg-blue-400/10 p-4 text-sm text-blue-100">
                 To co-watch YouTube, click screen share and choose the browser tab that already has YouTube open.
               </div>
+              <button
+                onClick={openYouTubeTab}
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-zinc-200"
+              >
+                <Youtube size={18} />
+                Open YouTube Tab
+                <ExternalLink size={15} />
+              </button>
             </div>
           </div>
         </div>

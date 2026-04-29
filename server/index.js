@@ -53,11 +53,14 @@ const io = new Server(server, {
   }
 });
 
+const getParticipantCount = (roomId) => {
+  return io.sockets.adapter.rooms.get(roomId)?.size || 0;
+};
+
 io.on("connection", (socket) => {
   socket.on("join-room", (roomId, userId) => {
     socket.join(roomId);
-    const room = io.sockets.adapter.rooms.get(roomId);
-    const participantCount = room?.size || 1;
+    const participantCount = getParticipantCount(roomId);
 
     socket.emit("room-joined", {
       roomId,
@@ -82,8 +85,23 @@ io.on("connection", (socket) => {
       socket.to(roomId).emit("ice-candidate", payload);
     });
 
+    socket.on("call-presence", (payload) => {
+      socket.to(roomId).emit("room-presence", payload);
+    });
+
+    socket.on("screen-share-state", (payload) => {
+      socket.to(roomId).emit("screen-share-state", payload);
+    });
+
+    socket.on("recording-state", (payload) => {
+      socket.to(roomId).emit("recording-state", payload);
+    });
+
     socket.on("disconnect", () => {
-      socket.to(roomId).emit("user-disconnected", userId);
+      socket.to(roomId).emit("user-disconnected", {
+        userId,
+        participantCount: getParticipantCount(roomId),
+      });
     });
   });
 });

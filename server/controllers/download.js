@@ -2,7 +2,17 @@ import Download from "../Modals/Download.js";
 import User from "../Modals/Auth.js";
 
 const PREMIUM_PLANS = new Set(["Bronze", "Silver", "Gold"]);
-const getDayKey = () => new Date().toISOString().slice(0, 10);
+const getDayKey = () => {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+};
 
 export const getDownloads = async (req, res) => {
   try {
@@ -39,29 +49,13 @@ export const requestDownload = async (req, res) => {
 
     if (!isPremiumUser) {
       const dayKey = getDayKey();
-      const quotaReservation = await Download.findOneAndUpdate(
-        {
-          viewer: userId,
-          dayKey,
-          isFreeQuota: true,
-        },
-        {
-          $setOnInsert: {
-            videoId,
-            viewer: userId,
-            downloadedOn: new Date(),
-            dayKey,
-            isFreeQuota: true,
-            planAtDownload: user.plan || "Free",
-          },
-        },
-        {
-          upsert: true,
-          new: false,
-        }
-      );
+      const existingFreeDownloadToday = await Download.findOne({
+        viewer: userId,
+        dayKey,
+        isFreeQuota: true,
+      });
 
-      if (quotaReservation) {
+      if (existingFreeDownloadToday) {
         return res.status(403).json({
           message: "DOWNLOAD_LIMIT_REACHED",
           plan: user.plan || "Free",
@@ -75,7 +69,7 @@ export const requestDownload = async (req, res) => {
         viewer: userId,
         downloadedOn: new Date(),
         dayKey,
-        isFreeQuota: false,
+        isFreeQuota: true,
         planAtDownload: user.plan || "Free",
       });
       await freeDownloadRecord.save();
@@ -93,6 +87,7 @@ export const requestDownload = async (req, res) => {
       message: "Download authorized",
       plan: user.plan || "Free",
       unlimitedDownloads: isPremiumUser,
+      remainingDownloadsToday: isPremiumUser ? null : 0,
     });
   } catch (error) {
     res.status(500).json({ message: "Failed to process download", error });

@@ -112,7 +112,8 @@ OTP authentication also changes by region:
 - Twilio
 
 ### Deployment
-- Render for frontend and backend
+- Vercel for frontend
+- Render for backend
 
 ## Project Structure
 
@@ -249,7 +250,7 @@ Main backend route groups:
 
 ## Production Notes
 
-- Frontend and backend are deployed separately on Render
+- Frontend and backend are deployed separately on Vercel and Render
 - CORS is configured for deployed frontend/backend communication
 - OTP and invoice email flows require valid SMTP configuration
 - SMS OTP requires Twilio configuration

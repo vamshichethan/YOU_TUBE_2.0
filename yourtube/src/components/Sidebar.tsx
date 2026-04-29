@@ -7,6 +7,7 @@ import {
   History,
   User,
   Download,
+  Phone,
 } from "lucide-react";
 import Link from "next/link";
 import React, { useState } from "react";
@@ -37,6 +38,12 @@ const Sidebar = () => {
           <Button variant="ghost" className="w-full justify-start hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
             <PlaySquare className="w-5 h-5 mr-3" />
             Subscriptions
+          </Button>
+        </Link>
+        <Link href="/call">
+          <Button variant="ghost" className="w-full justify-start hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+            <Phone className="w-5 h-5 mr-3" />
+            Calls
           </Button>
         </Link>
 

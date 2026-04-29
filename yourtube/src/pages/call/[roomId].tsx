@@ -1,7 +1,11 @@
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import CallRoom from '../../components/CallRoom';
+import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
+
+const CallRoom = dynamic(() => import('../../components/CallRoom'), {
+  ssr: false,
+});
 
 export default function CallPage() {
   const router = useRouter();

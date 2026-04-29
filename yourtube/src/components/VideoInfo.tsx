@@ -53,11 +53,15 @@ const VideoInfo = ({ video }: any) => {
           return console.log(error);
         }
       } else {
-        return await axiosInstance.post(`/history/views/${video?._id}`);
+        try {
+          return await axiosInstance.post(`/history/views/${video?._id}`);
+        } catch (error) {
+          console.warn("View tracking failed, continuing playback.", error);
+        }
       }
     };
     handleviews();
-  }, [user]);
+  }, [user, video?._id]);
   const handleLike = async () => {
     if (!user) return;
     try {
@@ -124,7 +128,7 @@ const VideoInfo = ({ video }: any) => {
     }
     try {
       setDownloadStatus("Preparing download...");
-      await axiosInstance.post('/download/request', { videoId: video._id });
+      const authRes = await axiosInstance.post('/download/request', { videoId: video._id });
 
       const videoUrl = typeof video.filepath === 'string' && video.filepath.startsWith('http')
          ? video.filepath
@@ -141,8 +145,12 @@ const VideoInfo = ({ video }: any) => {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      setDownloadStatus(user.plan === "Free" ? "Free plan: 1 download used for today" : "Paid plan: unlimited downloads active");
-      alert("Video downloaded! It's also accessible in your Downloads section.");
+      setDownloadStatus(
+        authRes.data.unlimitedDownloads
+          ? `${authRes.data.plan} plan: unlimited downloads active`
+          : "Free plan: today's 1 download has been used"
+      );
+      alert("Video downloaded. It is also saved in your Downloads section.");
     } catch (error: any) {
       if (error.response && error.response.status === 403 && error.response.data && error.response.data.message === "DOWNLOAD_LIMIT_REACHED") {
         setDownloadStatus("Free plan limit reached. Upgrade for unlimited downloads.");

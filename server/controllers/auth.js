@@ -1,12 +1,17 @@
 import mongoose from "mongoose";
 import users from "../Modals/Auth.js";
 import {
+  getIceServers,
+  hasStaticTurnConfig,
   hasSmtpConfig,
+  mailDeliveryMode,
+  hasTwilioClientConfig,
   hasTwilioConfig,
   isOtpPreviewEnabled,
   normalizePhoneNumber,
   sendMailMessage,
   sendSmsMessage,
+  smsDeliveryMode,
 } from "../lib/messaging.js";
 import { getOtpChannelForState, resolveRequestGeo } from "../lib/geo.js";
 
@@ -15,6 +20,9 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^\+?\d{10,15}$/;
 
 const normalizeState = (value = "") => value.trim();
+const isLocalRuntime = process.env.NODE_ENV !== "production";
+const shouldPreviewOtp = (deliveryConfigured) =>
+  isOtpPreviewEnabled || (isLocalRuntime && !deliveryConfigured);
 
 const sendEmailOtp = async (email, otp, state) => {
   return sendMailMessage({
@@ -48,9 +56,24 @@ export const getLocationContext = async (req, res) => {
   const geo = await resolveRequestGeo(req);
   return res.status(200).json({
     region: geo.region,
+    city: geo.city,
     isSouthIndia: geo.isSouthIndia,
     channel: getOtpChannelForState(geo.region),
   });
+};
+
+export const getIceServerConfig = async (req, res) => {
+  try {
+    const iceServers = await getIceServers();
+    return res.status(200).json({
+      iceServers,
+      relayConfigured: hasTwilioClientConfig || hasStaticTurnConfig,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Unable to fetch ICE server configuration.",
+    });
+  }
 };
 
 export const requestOTP = async (req, res) => {
@@ -82,54 +105,52 @@ export const requestOTP = async (req, res) => {
   setTimeout(() => otpCache.delete(normalizedIdentifier), 5 * 60 * 1000);
 
   if (otpChannel === "email") {
-    if (!hasSmtpConfig && !isOtpPreviewEnabled) {
-      return res.status(503).json({ message: "Email OTP service is not configured." });
-    }
-
-    if (hasSmtpConfig) {
-      try {
-        await sendEmailOtp(normalizedIdentifier, otp, normalizedState);
-      } catch (error) {
-        console.log("Email OTP send failed:", error.message);
-        if (!isOtpPreviewEnabled) {
-          otpCache.delete(normalizedIdentifier);
-          return res.status(502).json({ message: "Failed to send email OTP. Please try again." });
-        }
+    const previewOtp = shouldPreviewOtp(mailDeliveryMode !== "mock");
+    try {
+      const mailResult = await sendEmailOtp(normalizedIdentifier, otp, normalizedState);
+      if (mailDeliveryMode === "mock") {
+        console.log("[EMAIL OTP MOCK TRANSPORT]", JSON.stringify(mailResult));
+      }
+    } catch (error) {
+      console.log("Email OTP send failed:", error.message);
+      if (!isOtpPreviewEnabled) {
+        otpCache.delete(normalizedIdentifier);
+        return res.status(502).json({ message: "Failed to send email OTP. Please try again." });
       }
     }
 
-    console.log(`[EMAIL OTP] State: ${normalizedState}, To: ${normalizedIdentifier}, OTP: ${otp}`);
+    if (previewOtp) {
+      console.log(`[EMAIL OTP PREVIEW] State: ${normalizedState}, To: ${normalizedIdentifier}, OTP: ${otp}`);
+    }
     return res.status(200).json({
       message: "OTP sent to your registered email address",
       channel: otpChannel,
       state: normalizedState,
-      devOtp: isOtpPreviewEnabled ? otp : undefined,
+      deliveryMode: mailDeliveryMode,
+      devOtp: previewOtp ? otp : undefined,
     });
   }
 
-  if (!hasTwilioConfig && !isOtpPreviewEnabled) {
-    otpCache.delete(normalizedIdentifier);
-    return res.status(503).json({ message: "SMS OTP service is not configured." });
-  }
-
-  if (hasTwilioConfig) {
-    try {
-      await sendMobileOtp(normalizedIdentifier, otp, normalizedState);
-    } catch (error) {
-      console.log("SMS OTP send failed:", error.message);
-      if (!isOtpPreviewEnabled) {
-        otpCache.delete(normalizedIdentifier);
-        return res.status(502).json({ message: "Failed to send SMS OTP. Please try again." });
-      }
+  const previewOtp = shouldPreviewOtp(smsDeliveryMode !== "mock");
+  try {
+    await sendMobileOtp(normalizedIdentifier, otp, normalizedState);
+  } catch (error) {
+    console.log("SMS OTP send failed:", error.message);
+    if (!isOtpPreviewEnabled) {
+      otpCache.delete(normalizedIdentifier);
+      return res.status(502).json({ message: "Failed to send SMS OTP. Please try again." });
     }
   }
 
-  console.log(`[SMS OTP] State: ${normalizedState}, To: ${normalizedIdentifier}, OTP: ${otp}`);
+  if (previewOtp) {
+    console.log(`[SMS OTP PREVIEW] State: ${normalizedState}, To: ${normalizedIdentifier}, OTP: ${otp}`);
+  }
   return res.status(200).json({
     message: "OTP sent to your registered mobile number",
     channel: otpChannel,
     state: normalizedState,
-    devOtp: isOtpPreviewEnabled ? otp : undefined,
+    deliveryMode: smsDeliveryMode,
+    devOtp: previewOtp ? otp : undefined,
   });
 };
 
