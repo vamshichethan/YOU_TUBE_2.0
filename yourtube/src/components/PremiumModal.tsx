@@ -130,8 +130,8 @@ const PremiumModal: React.FC<PremiumModalProps> = ({ isOpen, onClose, defaultPla
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 py-6 backdrop-blur-sm md:items-center">
+      <div className="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in duration-200 md:p-8">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-gray-500 hover:text-black transition text-xl font-bold"
